@@ -1,0 +1,253 @@
+---
+title: "Appendix 6 — Choosing the Prominence Threshold (delta) for Patch Delineation"
+date: last-modified
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align = "center", dpi = 150)
+suppressPackageStartupMessages({library(data.table); library(ggplot2); library(terra)})
+HERE <- ".." # this .qmd lives in manuscript/; repo root is ..
+if (requireNamespace("lsed", quietly = TRUE)) library(lsed)                   # metric helpers (optional here)
+for (f in list.files(file.path(HERE, "R"), "^fn_.*\\.R$", full.names = TRUE)) source(f)  # local palette & theme
+if (!exists("theme_cda")) theme_cda <- function() theme_minimal(base_size = 12)
+```
+
+**Situation.** The watershed patch delineation (`Analyses.qmd`) splits a blob of suitable habitat
+wherever two probability *cores* are separated by a sufficiently deep neck. "Sufficiently deep" is
+the single tunable `delta`: the minimum drop in predicted probability between two peaks required to
+keep them as separate patches. Mechanically it is the fill depth on the inverted surface,
+`wbt_fill_depressions(1 - pr, max_depth = delta)`, so **`delta` is in the same units as the
+prediction surface** (probability), and the inversion preserves magnitude — a neck 0.05 deep in
+`1 - pr` is a prominence of 0.05 in `pr`. The question this appendix answers: can a *suitable*
+`delta` be derived from the data, or is it an irreducible policy choice?
+
+**`delta` is a topological persistence threshold.** Each core is "born" at its summit probability
+and "dies" when, as the surface is flooded downward, it spills into a taller neighbour through a
+saddle. Its *persistence* (prominence) is `peak − saddle`. `delta` simply discards every core whose
+persistence falls below it. So the data-driven question is whether the distribution of core
+prominences has a **gap** — a scale separating noise bumps from genuine cores — that would name a
+`delta`. We measure every core's prominence exactly with a union-find superlevel-set filtration
+(8-connected, matching the D8 watershed), pooled over a stratified sample of the multi-peak-capable
+patches.
+
+```{r delta-compute}
+#| include: false
+## Exact topological persistence of maxima for each sampled patch, pooled. Cached to data/ so the
+## render is cheap; delete the three CSVs (or set force <- TRUE) to recompute.
+force   <- FALSE
+f_prom  <- file.path(HERE, "data", "delta_prominence_sample.csv")
+f_surv  <- file.path(HERE, "data", "delta_survival.csv")
+f_land  <- file.path(HERE, "data", "delta_landscape_summary.csv")
+
+if (force || !all(file.exists(f_prom, f_surv, f_land))) {
+  set.seed(1)
+  patch_id <- terra::rast(file.path(HERE, "data", "raster", "example-patches.tif"))
+  pr       <- terra::rast(file.path(HERE, "data", "raster",
+                                    "1-3arc-Iteration1-PA1:35DO:0-Seed5001-Pr.tif"))
+  nc <- terra::ncol(patch_id); nr <- terra::nrow(patch_id)
+  ca <- prod(terra::res(patch_id))
+
+  pid_v <- terra::values(patch_id)[, 1]
+  pr_v  <- terra::values(pr)[, 1]
+  keep  <- !is.na(pid_v)
+  by_patch <- split(which(keep), pid_v[keep])
+  acres    <- vapply(by_patch, function(x) length(x) * ca / 4046.856, numeric(1))
+
+  ## stratified sample across size classes (delta only bites where a patch can hold >1 core)
+  pick <- function(ids, n) if (length(ids) <= n) ids else sample(ids, n)
+  samp <- c(pick(names(acres)[acres >= 2 & acres < 5], 80),
+            pick(names(acres)[acres >= 5 & acres < 10], 80),
+            names(acres)[acres >= 10])
+
+  dR <- c(-1,-1,-1, 0, 0, 1, 1, 1); dC <- c(-1, 0, 1,-1, 1,-1, 0, 1)   # 8-neighbourhood
+
+  ## prominence of every non-global peak in one patch (superlevel-set union-find)
+  persist_patch <- function(cells) {
+    n <- length(cells); if (n < 2) return(numeric(0))
+    v   <- pr_v[cells]
+    ord <- order(v, decreasing = TRUE)          # process tallest first
+    cells_o <- cells[ord]; v_o <- v[ord]
+    r_o <- (cells_o - 1L) %/% nc; c_o <- (cells_o - 1L) %% nc
+    ei <- integer(0); ej <- integer(0)
+    for (k in seq_along(dR)) {
+      nr2 <- r_o + dR[k]; nc2 <- c_o + dC[k]
+      ok  <- nr2 >= 0 & nr2 < nr & nc2 >= 0 & nc2 < nc
+      gnb <- ifelse(ok, nr2 * nc + nc2 + 1L, NA_integer_)
+      j   <- match(gnb, cells_o); valid <- !is.na(j)
+      ei <- c(ei, which(valid)); ej <- c(ej, j[valid])
+    }
+    lo <- pmin(ei, ej); hi <- pmax(ei, ej); k <- lo < hi
+    adj <- split(lo[k], hi[k])                   # later-added node -> its taller neighbours
+    parent <- integer(n); birth <- numeric(n); added <- logical(n)
+    find <- function(x) { while (parent[x] != x) { parent[x] <<- parent[parent[x]]; x <- parent[x] }; x }
+    proms <- numeric(0)
+    for (t in seq_len(n)) {
+      parent[t] <- t; birth[t] <- v_o[t]; added[t] <- TRUE
+      nb <- adj[[as.character(t)]]; if (is.null(nb)) next
+      nb <- nb[added[nb]]; if (!length(nb)) next
+      roots <- unique(c(find(t), vapply(nb, find, integer(1))))
+      if (length(roots) == 1) next
+      surv <- roots[which.max(birth[roots])]
+      dead <- roots[roots != surv]
+      proms <- c(proms, birth[dead] - v_o[t])    # prominence = peak - merging saddle
+      for (d in dead) parent[d] <- surv
+      parent[find(t)] <- surv
+    }
+    proms
+  }
+
+  rows <- vector("list", length(samp))
+  for (i in seq_along(samp)) {
+    p <- persist_patch(by_patch[[ samp[i] ]])
+    if (length(p)) rows[[i]] <- data.table(patch = samp[i], acres = acres[samp[i]], prominence = p)
+  }
+  prom_dt <- rbindlist(rows)
+  prom_dt[, patch := NULL]                        # keep it small; acres carried for stratified views
+  fwrite(prom_dt, f_prom)
+
+  ## peak-survival curve: mean peaks/patch = 1 (global) + (#prominences > delta)/n_patches
+  npatch <- length(samp)
+  grid   <- seq(0, 0.25, by = 0.0025)
+  surv   <- data.table(delta = grid,
+                       peaks_per_patch = sapply(grid, function(d) 1 + sum(prom_dt$prominence > d) / npatch),
+                       n_patches = npatch)
+  fwrite(surv, f_surv)
+
+  ## landscape-level distribution (the relief delta competes against), computed once
+  v  <- pr_v[!is.na(pr_v)]
+  s  <- v[v >= 0.45]
+  qs <- c(0, .25, .5, .75, .9, .95, .99, .999, 1)
+  land <- data.table(
+    scope = c(rep("full", length(qs)), rep("suitable>=0.45", length(qs))),
+    q = rep(qs, 2), value = c(quantile(v, qs), quantile(s, qs)))
+  land <- rbind(land,
+    data.table(scope = "full", q = NA, value = mean(v == 0)),            # mass at exactly 0
+    data.table(scope = "suitable>=0.45", q = NA, value = length(s)/length(v)))  # suitable fraction
+  fwrite(land, f_land)
+}
+
+prom <- fread(f_prom); surv <- fread(f_surv); land <- fread(f_land)
+npatch <- surv$n_patches[1]
+```
+
+## The prominence spectrum has no gap
+
+```{r fig-survival}
+#| label: fig-delta-survival
+#| fig-cap: "Cores recovered per patch as delta is relaxed, drawn as an elbow (scree) plot: delta runs from coarse (0.25, left) to fine (0.05, right), so moving rightward splits more. Reading it this way, the curve stays flat while only genuine, well-separated cores are being resolved, then bends upward into the regime where relaxing delta further buys mostly noise cores. The bend — the elbow near delta = 0.1 (dotted) — is the operating point: split down to it, not past it. The region below 0.05 (off-frame right) is the noise explosion toward hundreds of cores per patch."
+d_stop <- {
+  g <- surv[round(delta, 3) %in% c(0.05, 0.10, 0.15, 0.20, 0.25)][order(-delta)]
+  g[, added := c(NA, diff(peaks_per_patch))]       # cores gained by stepping delta DOWN into this row
+  fb <- which(g$added > 1)[1]                      # first step that adds >1 core/patch
+  if (is.na(fb)) min(g$delta) else g$delta[fb - 1] # the delta just before that step
+}
+ggplot(surv, aes(delta, peaks_per_patch)) +
+  geom_line(linewidth = 1, colour = "#2b6cb0") +
+  geom_vline(xintercept = d_stop, linetype = "dotted", colour = "#c05621", linewidth = 0.8) +
+  scale_x_reverse(breaks = seq(0.05, 0.25, 0.05)) +            # coarse (0.25) -> fine (0.05): climbs rightward
+  coord_cartesian(xlim = c(0.25, 0.05), ylim = c(0, 5)) +      # operational window; noise explosion below 0.05 is off-frame
+  labs(x = expression("Prominence threshold  " * delta * "   (coarse " %->% " fine; more splitting " %->% ")"),
+       y = "Mean cores recovered per patch",
+       title = "Cores recovered as delta relaxes — an elbow near 0.1") +
+  theme_cda()
+```
+
+```{r fig-spectrum}
+#| label: fig-delta-spectrum
+#| fig-cap: "Pooled distribution of core prominences (log10, prominence > 1e-4). The regular comb is the prediction surface's 0.002 quantization (501 stored levels), not real modes; the envelope is a single monotone decay from the quantization floor out to ~0.3. No valley separates a noise cloud from a signal cloud — the signal is effectively scale-free."
+ggplot(prom[prominence > 1e-4], aes(log10(prominence))) +
+  geom_histogram(bins = 60, fill = "grey55") +
+  geom_vline(xintercept = log10(0.05), linetype = "dashed", colour = "grey30") +
+  labs(x = expression(log[10] * "(prominence)"), y = "cores",
+       title = "Prominence spectrum: one decaying tail, no gap") +
+  theme_cda()
+```
+
+Reading the curve numerically:
+
+```{r tab-survival}
+knitr::kable(
+  surv[round(delta, 3) %in% c(0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.25),
+       .(delta, peaks_per_patch = round(peaks_per_patch, 2))],
+  col.names = c("delta", "mean cores / patch"),
+  caption = "Peaks recovered per patch at representative delta values.")
+```
+
+The merge rate falls monotonically as `delta` grows and never flattens into a plateau. If a true
+noise/signal scale existed, flooding would run hot clearing single-pixel noise, stall across an empty
+prominence gap, then resume as it dissolved genuine cores — a dip in the merge rate. There is no
+such dip. The log-prominence spectrum confirms it: a single decaying tail from the 0.002
+quantization floor outward, the only structure being the quantization comb. **The surface has no
+characteristic prominence scale, so `delta` is not a discoverable constant of this prediction.**
+
+**Why the resolution is not the culprit.** The filtration recovers ~31 genuine cores per patch at
+infinitesimal prominence, every saddle resolved; nothing is lost to the 9 m grid. The absence of a
+scale is a property of the modelled suitability, not of the method — cores nest continuously at all
+prominences. A scale-free field cannot name a `delta`.
+
+## What the landscape distribution says (and why binormal is the wrong frame *here*)
+
+```{r land-values}
+#| include: false
+mass0   <- land[scope == "full" & is.na(q), value]
+suit_fr <- land[scope == "suitable>=0.45" & is.na(q), value]
+med_s   <- land[scope == "suitable>=0.45" & q == 0.5, value]
+```
+
+These surfaces are **raw model output — no Platt correction, no AOA restriction**. Landscape-wide
+that shows: `r sprintf("%.1f%%", 100*mass0)` of cells are exactly 0 and suitable habitat (≥0.45) is
+only `r sprintf("%.2f%%", 100*suit_fr)` of the map, with the suitable band decaying monotonically
+from the 0.45 floor (median `r sprintf("%.2f", med_s)`) out to 1.0. There is **one** absence mode at
+zero and no second presence mode — the positive class is too rare and the scores uncalibrated, so
+the relief `delta` competes against is a smooth skewed tail, not a two-hump (binormal) band.
+
+The binormal / "0.5 → ~0.9 band" intuition is not wrong — it is simply a property of a **Platt-
+calibrated, AOA-restricted** surface, where scores are probabilities and the comparison is presences
+versus *hard* in-domain absences. That surface is exactly what Appendix 2's AOA machinery isolates
+and is not what is delineated here. Testing whether the in-domain calibrated band is binormal — and
+whether *that* surface has the prominence gap this raw one lacks — is deferred to when the DI/AOA
+mask and Platt step are in hand (see the `aoa_di_tif` hook in `Analyses.qmd`).
+
+## Recommendation: delta is a policy knob — anchor it, don't pretend to derive it
+
+Because no intrinsic scale exists, `delta` must import one. Three anchors, strongest first:
+
+1. **Noise model, `delta ≈ k·σ` (principled, pending inputs).** With a per-pixel predictive SD from
+   an ensemble, bootstrap, or CV-fold predictions, set `delta` so a core must out-rise what
+   prediction noise alone manufactures. This is the only route that makes `delta` *inference* rather
+   than policy; it needs model spread not presently in `data/`.
+2. **Spatial-autocorrelation floor.** The variogram range of the prediction surface defines an
+   effective resolution; prominence accrued over shorter distances is spurious. Smoothing to that
+   range before taking prominence injects a defensible scale (and relocates the choice into the
+   bandwidth).
+3. **Operational, round, top-down (what to use now).** Search `delta` coarsely from the largest
+   sensible value downward in 0.05 steps `{0.25, 0.20, 0.15, 0.10, 0.05}` — round numbers are the
+   honest encoding of a policy choice, and steps finer than 0.05 only carve quantization noise. Stop
+   stepping down when a decrement first adds more than one core per patch:
+
+```{r stopping-rule}
+g <- surv[round(delta, 3) %in% c(0.05, 0.10, 0.15, 0.20, 0.25)][order(-delta)]
+g[, `cores added by this step down` := round(c(NA, diff(peaks_per_patch)), 2)]
+knitr::kable(g[, .(delta, `mean cores / patch` = round(peaks_per_patch, 2), `cores added by this step down`)],
+             caption = sprintf("Top-down 0.05 search. Stop at the last delta before a step adds >1 core/patch: delta = %.2f.", d_stop))
+```
+
+```{r stopping-note}
+#| include: false
+# d_stop is computed in fig-survival and reused here; it is the recommended operational default.
+```
+
+With the current threshold (`sens_spec = 0.45`), that rule lands on **delta = `r d_stop`** — only
+the most prominent, unambiguous cores split; everything shallower is left whole. This pairs with the
+structural safeguard that the 10-acre subpatch cap already bounds unit *size* geometrically, so
+`delta` need not carry the splitting load: running it coarse (few, high-confidence ecological splits)
+and letting the area cap handle the rest is the defensible posture when the data refuses to name a
+scale.
+
+**Conclusion.** The honest finding is a negative one, and it is worth stating plainly: for a raw SDM
+surface, the prominence threshold `delta` has no data-intrinsic optimum — the core-prominence
+spectrum is a single scale-free decay. Treat `delta` as a documented policy (round, coarse,
+top-down with the stopping rule above) until a predictive-SD surface lets it be set by `k·σ`, or a
+Platt-calibrated in-AOA surface is tested for the gap this raw one lacks.

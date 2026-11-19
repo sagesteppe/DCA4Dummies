@@ -1,5 +1,5 @@
 ---
-title: "Appendix 3 - How much do errors in the assumed prevalence change the decision curve?"
+title: "Appendix 3 - Decision Curves are Resilient to mis-Estimations of Landscape Prevalence"
 date: last-modified
 ---
 

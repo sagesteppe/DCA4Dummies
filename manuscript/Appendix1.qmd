@@ -1,5 +1,5 @@
 ---
-title: "Appendix 1 — Comparision of Summary and Per Point DCA Curves"
+title: "Appendix 1 — Comparision of DCA Curves from Reported Scalars and Test Data"
 date: last-modified
 ---
 

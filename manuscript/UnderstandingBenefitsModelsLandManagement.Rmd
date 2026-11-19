@@ -159,10 +159,10 @@ ggplot(nb, aes(threshold, net_benefit, colour = strategy)) +
     parse = TRUE) +
 
   # benefit caption at the 1:X ratio: percent lift over the best reference
-  annotate(
-    "label", x = PT_MARK + 0.015, y = nb_mark,
-    size = 5, colour = "#1b7837",
-    fill = "white", label = sprintf("Lift: +%.0f%%", lift_pct)) +
+ # annotate(
+ #   "label", x = PT_MARK + 0.015, y = nb_mark,
+ #   size = 5, colour = "#1b7837",
+ #   fill = "white", label = sprintf("Lift: +%.0f%%", lift_pct)) +
 
   # prevalence sits where treat-all crosses treat-none (p_t = prevalence)
   annotate(
@@ -202,20 +202,16 @@ ggplot(nb, aes(threshold, net_benefit, colour = strategy)) +
 ```
 
 Decision curve analysis is considered visually on a plot with two axis. 
-The Y axis is the net benefit of making the action. 
-For example ... 
-The X axis is the theshold probability ($p_t$), a metric each user will define based on their objectives. 
-For example, if you were satisfied to find one new rare plant population per five sites surveyed ($*1/5)*100$), $p_t$ is = 20%. 
-A DCA plot always contains a line with a fixed intercept, at 0, and slope of 0 (i.e. a horizontal line) 'treat none'; indicating the condition of making no action. 
-A DCA also contains a 'treat all' line with a Y intercept of the NET BENEFIT, and a slope relating it to the prevalence of the phenomon in the population on the X axis. 
-To the left of this line IS ((NAME)), to the right of it IS ((NAME)). 
+The Y axis is the net benefit of acting on the decision, and is derived from the following three components, and discussed at the end of this paragraph.  
+1) The X axis is the theshold probability ($p_t$), a metric each user will define based on their objectives. 
+For example, if you were satisfied to find one new rare plant population per ten sites surveyed ($*1/10)*100$), $p_t$ is = 10%. 
+2) A DCA plot always contains a line with a fixed intercept, at 0, and slope of 0 (i.e. a horizontal line) 'treat none'; indicating the decision to take no action. 
+3) A DCA contains a 'treat all' line with a Y intercept at the prevalence of the phenomenom within the populations, and passing through Net Benefit at 0, at the threshold probability at the same prevalence, and always with a slope of -1. 
+To the right of the treat all line - and above the treat none line, and to the left of the decision curve is the space representing where a model can improve decisions. 
+Finally, once the plot is populated with the above, net benefit (Y axis) is the intersection of $p_t$ with the model; in the example figure the model has a net benefit of 0.07 over the treat none strategy, and the model has an advantage of roughly 0.05 over a decision to treat all. 
 
-In practice, a DCA will generally contain two or more curves; although only one is required. 
+The DCA may accomodate more than one model at a time, when alternative - and perhaps complementary, models are available. 
 If only a single model is available to inform decisions a curve of its ... IS. 
-The area above the ((NAME)) and ((NAME)) curve depicts the net benefit of the model for decision making. 
-THIS is the ... 
-
-The DCA may accomodate more than one model at a time, when additional models are available. 
 
 PR-AUC measures the ability of a model to detect the more rare class of an outcome, by using the precision (the accuracy of positive predictions) and recall (the ability to identify all positive instances) across different thresholds. 
 PR-AUC, unlike the closely related ROC-AUC wherein a value of 0.5 indicates a model is no better than random chance, PR-AUC greater than prevalence indicates a more performant model. 
@@ -224,7 +220,7 @@ Hence PR-AUC, after correction to landscape prevalence,
 
 ## From Patients to Pixels and Patches 
 
-DCA traditional context relates to the population of patients that a doctor serves. 
+DCA traditional context relates to the population of patients that a doctor serves [@vickers2019simple]. 
 The doctor is likely to have beliefs on how often a certain procedure, generally an invasive procedure to detect a disease, and under what conditions a procedure should be conducted. 
 Notably, this framework requires discrete entities (e.g. patients) that the doctors beliefs on treatment and a model pertain to. 
 
@@ -235,14 +231,18 @@ For the application of species distribution models to detect new species, the un
 WHILE CREATING SDMS we calculate PR-AUC from the ratio of presences to absence points. 
 However, these data are rarely balanced to the scale of the landscape. 
 Indeed it is common practice for certain models to reduce the absences to be roughly 1-10x the number of presences (Elith).
-Hence using a 1:1 ratio of P:A, we are reporting the measures of success for a taxon that would occupy 50% of the lanscape. 
+Hence using a 1:1 ratio of P:A, we are reporting the measures of success for a taxon that would occupy 50% of the lanscape.
+
+<< check elith 09 and chefaoui2008assessing >> for PA effects on SDM
 
 Clearly, this is not the case - even for many of the most common species. 
 Therefore, in the naive approach, we correct the PR-AUC to represent the expected fraction of the landscape occupied by the taxon.
-For a rare species this fraction is small, and for a narrowly distributed endemic it can be far smaller than often assumed: our case study taxon occupies only ~0.003% of its modeled domain, so a realistic range spans roughly 0.001% to 5% of a landscape.
+For a rare species this fraction is small, and for a narrowly distributed endemic it can be far smaller than often assumed: our case study taxon occupies only ~0.003% of its modeled domain, so a realistic range may span 0.001% to 5% of a landscape.
 
 
 # Applying DCA formulations to SDMs 
+
+The user is required to calculate a single value before undertaking an analysis. 
 
 $$\frac{p_t}{1 - p_t} = \frac{\text{cost of one unsuccessful site survey}}{\text{value of finding one occupied site}}$$
 
@@ -363,6 +363,16 @@ where $\hat p_i$ is the predicted probability for point $i$ and $p_t$ the thresh
 Our simulations (Appendix 1) indicate when a model was trained at a presence-to-absence (P:A) ratio far from the expected landscape prevalence, the summary route is biased and per-point predictions give a more accurate curve.
 When the P:A ratio is close to the landscape prevalence, the summary route is adequate and per-point predictions are unlikely to alter your intepretations of the models utility.
 
+#### Curve Uncertainty Metrics
+
+A confidence interval around the DCA for the model can be calculated when a user has per-point data.
+Notably, the lower-confidence interval is the most important for decision making, because it is the difference between the treat all and treat none scenarios that affect the advantage of the model [@vickers2008decision].
+WE DID THIS AND SIMILAR TO VICKERS, WHILE USEFUL TO HAVE, IT IS GENERALLY QUITE TIGHT TO THE CURVE. 
+
+Decision makers without access to the raw point data cannot calculate a formal confidence interval. 
+However, sensitivity analysis offers a stand in WHERE IF YOU DO THIS. 
+However, based on our results, where we repeatedly model species under similar conditions (pseudo-absence universe, Presence absence ratios, covariate selection, and modelling methods), we offer an estimate that PR-AUC halfwidth varies by around 0.04 PR-AUC accuracy, as a starting point suggestion.  
+
 #### Naive formulation summary
 
 ![An SDM's net benefit calculated using the two naive approaches. Using the binormal assumption on the reported PR-AUC value (summary), and from the held-out predictions (per-point). For this model, fit with a P:A ratio near the landscape prevalence, the two curves largely agree. Here two curves cross near p_t ≈ 0.25, with the per-point curve marginally higher under broad survey effort and marginally lower at the most selective thresholds, where few sites clear the cutoff.](../figures/dca_baseline_dcurves.png){#fig-naive-dca}
@@ -372,22 +382,11 @@ First, that pixels are independent and each able to harbour the taxon; second, t
 
 ### Patch Formulation 
 
-The above assumes a continuous landscape, however survey work and decisions are unlikely to be across the entire surface. 
-Rather actions are likely to be made at smaller units. 
-Here we show the benefit of using an SDM to visit discrete units of it's prediction. 
+The rationale above assumes a continuous landscape, however survey work and decisions are unlikely to be across the entire surface. 
+And further modifications to the DCA framework must be made to accomodate the structure of a landscape. 
+Indeed, while landcapes are modelled at the pixel level, management decisions are often made at the level of: timber stand, grazing allotment, or other unit, themselves often times defined by watersheeds. 
 
-<< methods note — patch delineation (single example model): binarize the predicted-probability
-raster at the sensitivity–specificity threshold to get a mask of suitable habitat, then run a
-marker-controlled watershed on the probability surface *within* that mask. Seeds are the local
-probability maxima (h-maxima); watershed lines fall on the low-probability necks between cores,
-so two cores split into separate patches when the surface dips sharply between them — even where
-that dip never crosses the binary threshold. A single prominence parameter δ (minimum depth of
-the neck below the lower peak) controls how aggressively necked blobs are divided; distance
-enters implicitly, since far-apart cores are separated by deep necks while cores joined by a wide
-high-probability corridor remain one patch. This is the fast substitute for boundary (wombling)
-detection. Each resulting patch is then scored as occupied if it contains ≥1 ground-truth
-presence, with an aggregated predicted probability (max or mean) over its pixels. Report the δ
-used and confirm the patch-level DCA is stable across a reasonable δ range. >>
+Here we show the benefit of using an SDM to visit discrete units of it's prediction. 
 
 ```{r patch delineation watershed}
 # The marker-controlled watershed patch delineation is run in Analyses.qmd (it is
@@ -397,6 +396,12 @@ sens_spec <- patch_summary$sens_spec
 delta     <- patch_summary$delta
 n_patches <- patch_summary$n_patches
 ```
+
+OVERVIEW S1
+Binarise the predictions, split into patches, subsplit patches into 'watersheds' (based on prediciton parameters), rather than true watersheds (caveat below). 
+The continuous predictions is converted into a surface via binarising at a threshold, here using sensitivity–specificity (`sens_spec` = `r sens_spec`) [dismo].
+Patches of suitable habitat are identified using queen's case connections, and using this mask, areas of heterogeneity of suitable habitat (i.e. oscillation in suitability), are identified prominence filter. 
+Patches known to be occupied are tagged, and the remaining patches of habitat, are know discrete (albeit often times adjacent) units for 'treatment', or for most of work survey. 
 
 We delineate patches on the example model's probability surface by binarizing at
 the sensitivity–specificity threshold (`sens_spec` = `r sens_spec`) and running a
@@ -438,9 +443,9 @@ expert interpretation of top sites to visit and
 Discuss biases effects on the model here // bias introduced here
 
 
-# Using DCA Curves
+# Using DCA Curves in your decision making
 
-To facilitate the uptake of our suggestions, we have prepared small packages in both the R and Python language. 
+To facilitate the uptake of our suggestions, we have prepared the package lsed available in both [R](https://github.com/sagesteppe/lsed) and [Python](https://github.com/sagesteppe/lsed-py). 
 Our software builds on packages named dcurves in both programming langauges, and are available at: GITHUB MAIN LANDING PAGE [@sjoberg2025dcurves; @porwal_dcurves_2025]. 
 For users interested in using DCA using only summary PR-AUC values an interactive online calculator is available at GITHUB HERE.  
 We also have a developed a communication template, to convey the methods of our approach, and communicate your findings at GITHUB HERE. 
@@ -456,7 +461,7 @@ J.B.F. is the Director of Conservation at the Chicago Botanic Garden, member of 
 The last ~ XX~ years of his career have focused on the conservation of rare plants ~ 1 2 3 4 5 words ~ and restoration. 
 S.T. is a professor of ~Geo some flavour~ at the University of California San Diego. 
 Her research focuses on enhancing urban wildland corridors and wetlands using decisions informed by remote sensing.
-R.C.B. worked as a field botanist and research ecologist for a variety of US federal and state land management agencies as well as NGOs for a decade. 
+R.C.B. worked as a field botanist and research ecologist for a variety of US federal and state land management agencies, and NGOs for a decade. 
 He currently works as a geospatial consultant in the private sector. 
 
 ### Funding
@@ -475,8 +480,11 @@ Data from the referred manuscript are available at [], and [].
 
 ### Appendix
 
-1) WORDS
-2) WORDS
+1) Comparision of DCA Curves from Reported Scalars and Test Data
+2) Correcting for the Models Area of Applicability
+3) Decision Curves are Resilient to mis-Estimations of Landscape Prevalence
+4) Areas of Applicability Shrink as Function of the Number of Covariates in a Model
+5) Calculating a Default Plausibility Band for Repeated SDM's
 
 ## article types notes below
 
