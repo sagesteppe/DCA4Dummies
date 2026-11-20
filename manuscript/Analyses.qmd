@@ -116,74 +116,44 @@ written to `data/patch_delineation_summary.csv` for the manuscript to read.
 
 ```{r patch-delineation}
 #| include: false
-# sens_spec and delta are placeholders - real sensitivity-specificity and a tuned prominence
-# are joined in later. Requires WhiteboxTools (whitebox::install_whitebox()).
+# One wrapper call runs the whole pipeline: watershed -> patches -> banding ->
+# attributes -> polygons (survey_units() in R/fn_patches.R). It reads only the
+# suitable cells and caches the heavy steps (patch raster, unit raster, polygons)
+# in rdir on a signature of the inputs. Requires WhiteboxTools (whitebox::install_whitebox()).
 suppressPackageStartupMessages({library(terra); library(whitebox)})
 whitebox::wbt_verbose(FALSE)
-sens_spec <- 0.45   # suitable-habitat threshold (probability units)
-delta <- 0.05   # prominence: min neck depth to split two cores
-min_area <- 300   # drop patches at or below this area (m^2): slivers too small to survey
 
-rdir        <- file.path(HERE, "data", "raster")
-src_tif     <- file.path(rdir, "1-3arc-Iteration1-PA1:35DO:0-Seed5001-Pr.tif")
-patches_tif <- file.path(rdir, "example-patches.tif")
-sig_file    <- file.path(rdir, "example-patches.sig")
+sens_spec  <- 0.45                               # suitable-habitat threshold (prob units)
+delta      <- 0.05                               # watershed prominence (neck depth to split cores)
+min_area   <- 300                                # drop patches <= this area (m^2): un-surveyable slivers
+band_brks  <- c(0.45, 0.55, 0.7, 0.85, 1.0001)   # suitability band edges on the raw surface
+band_minac <- c(2, 1, 0.5, 0)                    # per-band snap floors (ac): tighter as suitability rises
+trig_ac    <- 20                                 # only patches > this (ac) are banded
+maxcap_ac  <- 20                                 # geometric cap on any final unit (ac)
 
-pr <- terra::rast(src_tif)
+rdir     <- file.path(HERE, "data", "raster")
+src_tif  <- file.path(rdir, "1-3arc-Iteration1-PA1:35DO:0-Seed5001-Pr.tif")
+occ_gpkg <- file.path(HERE, "data", "3m-presence-iter2.gpkg")
+aoa_di   <- file.path(rdir, "example-aoa-di.tif")  # DI surface; AOA tag computed only when present
 
-# Skip the (costly, ~3e8-cell) watershed pipeline unless something that affects
-# the result changed: the thresholds, or the source raster. A signature sidecar
-# records those inputs; a match means the cached patches are still valid.
-sig   <- paste(sens_spec, delta, min_area, basename(src_tif),
-               file.info(src_tif)$size, file.mtime(src_tif), sep = "|")
-fresh <- file.exists(patches_tif) && file.exists(sig_file) &&
-         identical(readLines(sig_file, warn = FALSE), sig)
+banded <- survey_units(
+  pr = src_tif, occ_pts = occ_gpkg, method = "band",
+  sens_spec = sens_spec, delta = delta, min_area = min_area,
+  band_brks = band_brks, band_minac = band_minac, trig_ac = trig_ac, maxcap_ac = maxcap_ac,
+  aoa_di = if (file.exists(aoa_di)) aoa_di else NULL,
+  work_dir = rdir, cache_dir = rdir,
+  out_gpkg = file.path(HERE, "data", "subpatches_banded.gpkg"))
 
-if (fresh) {
-  patch_id <- terra::rast(patches_tif)
-} else {
-  # Stage 1 (watershed -> patches): binarize, marker-controlled watershed with a
-  # rook's-case fallback, and the min_area sliver filter. See R/fn_patches.R.
-  patch_id <- delineate_patches(pr, sens_spec, delta, min_area, rdir)
-
-  # persist the delineated (and size-filtered) patches, record the signature
-  terra::writeRaster(patch_id, patches_tif, overwrite = TRUE)
-  writeLines(sig, sig_file)
-}
-names(patch_id) <- "patch"
-
-# aggregate predicted probability over each patch (max and mean)
-patch_max  <- terra::zonal(pr, patch_id, fun = "max",  na.rm = TRUE)
-patch_mean <- terra::zonal(pr, patch_id, fun = "mean", na.rm = TRUE)
-patch_prob <- merge(patch_max, patch_mean, by = "patch")
-names(patch_prob) <- c("patch", "prob_max", "prob_mean")
-
-n_patches <- nrow(patch_prob)
-
-# GROUND TRUTH: which patches does the taxon actually occupy? Overlay the iter-2
-# presences (UTM 13N, same CRS as the raster) onto the delineated patches. A
-# presence that lands below sens_spec sits off every patch (patch = NA); it marks
-# suitable habitat the binarization missed, not a labelling error, so we count it
-# rather than drop it silently.
-occ_pts    <- terra::vect(file.path(HERE, "data", "3m-presence-iter2.gpkg"))
-occ_hit    <- terra::extract(patch_id, occ_pts)$patch
-occ_ids    <- sort(unique(occ_hit[!is.na(occ_hit)]))  # occupied patch ids
-n_points     <- length(occ_hit)
-n_points_off <- sum(is.na(occ_hit))                   # presences off every patch
-n_occupied   <- length(occ_ids)
-
-# flag each patch as occupied / unoccupied for the patch-level DCA
-patch_prob$occupied <- patch_prob$patch %in% occ_ids
-write.csv(patch_prob,
+# ---- patch-level cuts (ground truth for the patch-scale DCA) ----
+# A presence below sens_spec lands off every patch; survey_units() counts those
+# (summary$n_points_off) rather than dropping them silently.
+write.csv(banded$patches[, c("patch", "prob_max", "prob_mean", "occupied")],
           file.path(HERE, "data", "patch_predictions.csv"), row.names = FALSE)
-
-# compact summary for the manuscript's inline values
 write.csv(
-  data.frame(sens_spec = sens_spec, delta = delta, min_area = min_area,
-             n_patches = n_patches, n_occupied = n_occupied,
-             n_points = n_points, n_points_off = n_points_off),
-  file.path(HERE, "data", "patch_delineation_summary.csv"),
-  row.names = FALSE)
+  with(banded$summary,
+       data.frame(sens_spec, delta, min_area, n_patches,
+                  n_occupied = n_patches_occ, n_points, n_points_off)),
+  file.path(HERE, "data", "patch_delineation_summary.csv"), row.names = FALSE)
 ```
 
 ## Subpatch delineation (survey units)
@@ -199,120 +169,26 @@ largest, most irregular patches). Cached with an input signature like the patch 
 
 ```{r subpatch-delineation}
 #| include: false
-max_area_ac <- 10   # maximum subpatch size (acres)
+max_area_ac <- 10   # maximum subpatch size (acres) for the k-means lever
 
-subpatch_tif  <- file.path(rdir, "example-subpatches.tif")
-subpatch_sig  <- file.path(rdir, "example-subpatches.sig")
-subpatch_gpkg <- file.path(HERE, "data", "subpatches.gpkg")
+# Same wrapper, geometric (k-means) subdivision instead of banding. The patch
+# raster is already cached from the banding call above, so only the k-means split,
+# its attributes, and its polygons are computed here. The AOA tag flows through
+# when a DI surface is present (see R/fn_patches.R :: survey_units / aoa_fraction).
+kmeans_units <- survey_units(
+  pr = src_tif, occ_pts = occ_gpkg, method = "kmeans",
+  sens_spec = sens_spec, delta = delta, min_area = min_area,
+  max_area_ac = max_area_ac,
+  aoa_di = if (file.exists(aoa_di)) aoa_di else NULL,
+  work_dir = rdir, cache_dir = rdir,
+  out_gpkg = file.path(HERE, "data", "subpatches.gpkg"))
 
-cell_area   <- prod(terra::res(patch_id))
-max_area_m2 <- max_area_ac * 4046.856
-max_cells   <- floor(max_area_m2 / cell_area)   # cap in whole cells
-
-# Reuse the cached split unless the patches, the cap, or the raster changed.
-sig2   <- paste(sig, max_area_ac, sep = "|")
-fresh2 <- file.exists(subpatch_tif) && file.exists(subpatch_sig) &&
-          identical(readLines(subpatch_sig, warn = FALSE), sig2)
-
-if (fresh2) {
-  subpatch_id <- terra::rast(subpatch_tif)
-} else {
-  set.seed(1)   # k-means init is random; fix it so the split is reproducible
-  pid <- terra::values(patch_id)[, 1]
-  idx <- which(!is.na(pid))
-  pv  <- pid[idx]
-  xy  <- terra::xyFromCell(patch_id, idx)
-
-  # one pass over patches; small ones get a fresh id, oversized ones are split
-  sub     <- integer(length(pv))
-  next_id <- 0L
-  for (g in split(seq_along(pv), pv)) {
-    n <- length(g)
-    if (n <= max_cells) {
-      next_id <- next_id + 1L
-      sub[g]  <- next_id
-    } else {
-      k <- as.integer(ceiling(n / max_cells))
-      repeat {   # k-means targets equal sizes but doesn't bound them; raise k until it fits
-        km <- stats::kmeans(xy[g, , drop = FALSE], centers = k, iter.max = 100)
-        if (max(tabulate(km$cluster)) <= max_cells) break
-        k <- k + 1L
-      }
-      sub[g]  <- next_id + km$cluster
-      next_id <- next_id + k
-    }
-  }
-
-  subpatch_id <- terra::rast(patch_id)
-  sv <- rep(NA_integer_, terra::ncell(subpatch_id))
-  sv[idx] <- sub
-  terra::values(subpatch_id) <- sv
-  terra::writeRaster(subpatch_id, subpatch_tif, overwrite = TRUE)
-  writeLines(sig2, subpatch_sig)
-}
-names(subpatch_id) <- "subpatch"
-
-n_subpatches <- length(unique(na.omit(terra::values(subpatch_id)[, 1])))
-
-# Attributes: parent patch (min == max within a nested subpatch), per-subpatch
-# probability, and occupancy re-scored at the subpatch level.
-parent <- terra::zonal(patch_id, subpatch_id, fun = "min", na.rm = TRUE)
-smax   <- terra::zonal(pr, subpatch_id, fun = "max",  na.rm = TRUE)
-smean  <- terra::zonal(pr, subpatch_id, fun = "mean", na.rm = TRUE)
-names(parent) <- c("subpatch", "patch")
-names(smax)   <- c("subpatch", "prob_max")
-names(smean)  <- c("subpatch", "prob_mean")
-sub_occ_hit <- terra::extract(subpatch_id, occ_pts)$subpatch
-sub_occ_ids <- sort(unique(sub_occ_hit[!is.na(sub_occ_hit)]))
-
-att <- Reduce(function(a, b) merge(a, b, by = "subpatch"),
-              list(parent, smax, smean))
-att$occupied <- att$subpatch %in% sub_occ_ids
-
-# AOA tag (IN / OUT of the area of applicability) ----------------------------
-# Method (see Appendix 2 & 4): compute the AOA from the TRAINING PRESENCES ONLY
-# (pseudo-absences conflate the dissimilarity index), equal variable weights,
-# via CAST::aoa(newdata = <predictor stack over this extent>, train = <presence
-# predictor values>); a cell is in-domain where DI <= DI_thresh. Then tag a
-# subpatch IN when the MAJORITY of its cells are in-domain.
-#
-# TODO: the predictor stack + training-presence predictor values (or a
-# precomputed DI/AOA raster) for the example model are not in this repo
-# (data/ holds only the probability surface; point-level DI lives in
-# data/holdout_point_aoa.csv). Point `aoa_di_tif` at a DI raster, or build the
-# AOA surface, then this block tags each subpatch and the column flows through
-# to the polygons and summary. Until then every subpatch is tagged NA.
-aoa_di_tif <- file.path(rdir, "example-aoa-di.tif")   # DI surface; set when available
-if (file.exists(aoa_di_tif)) {
-  di        <- terra::rast(aoa_di_tif)
-  di_thresh <- 1                                      # DI normalised to its threshold => in-domain is di <= 1
-  in_aoa    <- di <= di_thresh                        # logical in-domain mask (1/0)
-  # fraction of each subpatch's cells that are in-domain; IN when > 0.5
-  frac_in   <- terra::zonal(in_aoa, subpatch_id, fun = "mean", na.rm = TRUE)
-  names(frac_in) <- c("subpatch", "frac_in_aoa")
-  att <- merge(att, frac_in, by = "subpatch")
-  att$in_aoa <- att$frac_in_aoa > 0.5                 # majority-of-cells rule
-} else {
-  att$frac_in_aoa <- NA_real_
-  att$in_aoa      <- NA
-}
-
-# Polygonize for mapping; dissolve each subpatch value to a single feature.
-subpatch_poly <- terra::as.polygons(subpatch_id, dissolve = TRUE)
-subpatch_poly <- merge(subpatch_poly, att, by = "subpatch")
-subpatch_poly$acres <- terra::expanse(subpatch_poly, unit = "m") / 4046.856
-terra::writeVector(subpatch_poly, subpatch_gpkg, overwrite = TRUE)
-
-n_split <- length(unique(att$patch[att$patch %in%
-            as.integer(names(which(table(att$patch) > 1)))]))
-
-# compact summary for the manuscript
 write.csv(
-  data.frame(max_area_ac = max_area_ac, n_subpatches = n_subpatches,
-             n_patches_split = n_split, n_occupied = length(sub_occ_ids),
-             n_in_aoa = sum(att$in_aoa, na.rm = TRUE)),
-  file.path(HERE, "data", "subpatch_delineation_summary.csv"),
-  row.names = FALSE)
+  with(kmeans_units$summary,
+       data.frame(max_area_ac = max_area_ac, n_subpatches = n_units,
+                  n_patches_split = n_split, n_occupied = n_units_occ,
+                  n_in_aoa = n_in_aoa)),
+  file.path(HERE, "data", "subpatch_delineation_summary.csv"), row.names = FALSE)
 ```
 
 ## Subpatch delineation — suitability banding (alternative)
@@ -330,63 +206,13 @@ dependencies); cached like the rasters above.
 
 ```{r subpatch-banding}
 #| include: false
-band_brks  <- c(0.45, 0.55, 0.7, 0.85, 1.0001)  # suitability band edges (raw surface)
-band_minac <- c(2, 1, 0.5, 0)                    # per-band min size (ac): merge pieces below this
-trig_ac    <- 20                                 # only patches larger than this are banded
-maxcap_ac  <- 20                                 # cap: geometrically split any final unit above this
-
-subpatchb_tif  <- file.path(rdir, "example-subpatches-banded.tif")
-subpatchb_sig  <- file.path(rdir, "example-subpatches-banded.sig")
-subpatchb_gpkg <- file.path(HERE, "data", "subpatches_banded.gpkg")
-
-nc <- terra::ncol(patch_id); nr <- terra::nrow(patch_id)
-cell_area <- prod(terra::res(patch_id)); cap_cells <- floor(maxcap_ac * 4046.856 / cell_area)
-
-sigb <- paste(sig, paste(band_brks, collapse = ","), paste(band_minac, collapse = ","),
-              trig_ac, maxcap_ac, sep = "|")
-freshb <- file.exists(subpatchb_tif) && file.exists(subpatchb_sig) &&
-          identical(readLines(subpatchb_sig, warn = FALSE), sigb)
-
-if (freshb) {
-  subpatchb_id <- terra::rast(subpatchb_tif)
-} else {
-  pid <- terra::values(patch_id)[, 1]; prv <- terra::values(pr)[, 1]
-  cells <- which(!is.na(pid)); memb <- pid[cells]
-
-  # Stage 2 (contour -> snap -> k-means cap): band each oversized patch, snap
-  # sub-threshold pieces into their best neighbour, then geometrically cap.
-  # Helpers (rook_edges / uf_comp / snap_pieces / kcap) live in R/fn_patches.R.
-  unit <- band_subpatches(cells, memb, prv, nc, nr, cell_area,
-                          band_brks, band_minac, trig_ac, cap_cells, seed = 1)
-
-  subpatchb_id <- terra::rast(patch_id)
-  sv <- rep(NA_integer_, terra::ncell(patch_id)); sv[cells] <- unit
-  terra::values(subpatchb_id) <- sv
-  terra::writeRaster(subpatchb_id, subpatchb_tif, overwrite = TRUE)
-  writeLines(sigb, subpatchb_sig)
-}
-names(subpatchb_id) <- "subpatch"
-
-# attributes: parent patch, per-unit probability, priority band (from max suitability), occupancy
-bparent <- terra::zonal(patch_id, subpatchb_id, fun = "min",  na.rm = TRUE)
-bmax    <- terra::zonal(pr, subpatchb_id, fun = "max",  na.rm = TRUE)
-bmean   <- terra::zonal(pr, subpatchb_id, fun = "mean", na.rm = TRUE)
-names(bparent) <- c("subpatch", "patch"); names(bmax) <- c("subpatch", "prob_max")
-names(bmean)   <- c("subpatch", "prob_mean")
-battr <- Reduce(function(a, b) merge(a, b, by = "subpatch"), list(bparent, bmax, bmean))
-battr$band <- as.integer(cut(battr$prob_max, band_brks, right = FALSE))   # priority tier (1 low .. 4 high)
-b_occ <- terra::extract(subpatchb_id, occ_pts)$subpatch
-battr$occupied <- battr$subpatch %in% sort(unique(b_occ[!is.na(b_occ)]))
-
-subpatchb_poly <- terra::as.polygons(subpatchb_id, dissolve = TRUE)
-subpatchb_poly <- merge(subpatchb_poly, battr, by = "subpatch")
-subpatchb_poly$acres <- terra::expanse(subpatchb_poly, unit = "m") / 4046.856
-terra::writeVector(subpatchb_poly, subpatchb_gpkg, overwrite = TRUE)
-
+# Banding was already computed in the patch-delineation call above (object `banded`,
+# method = "band"): units, priority band (1 low .. 4 high from max suitability),
+# occupancy, acreage, and the subpatches_banded.gpkg are all produced there. Here we
+# only record the banding summary.
 write.csv(
-  data.frame(n_units = nrow(battr),
-             n_high = sum(battr$band >= 3), n_occupied = sum(battr$occupied),
-             max_acres = round(max(subpatchb_poly$acres), 1)),
+  with(banded$summary,
+       data.frame(n_units, n_high, n_occupied = n_units_occ, max_acres)),
   file.path(HERE, "data", "subpatch_banding_summary.csv"), row.names = FALSE)
 ```
 
