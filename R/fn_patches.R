@@ -29,6 +29,10 @@
 #' @name patches
 NULL
 
+# Square metres per US survey acre -- the one area constant the pipeline uses, so
+# acre<->m^2<->cell conversions all read from here rather than a scattered literal.
+M2_PER_ACRE <- 4046.856
+
 # ---------------------------------------------------------------------------
 # Stage 1: watershed -> patches
 # ---------------------------------------------------------------------------
@@ -253,6 +257,52 @@ kcap <- function(gc, capn, nc) {
 # Stage 2: contour (band) -> snap -> k-means cap
 # ---------------------------------------------------------------------------
 
+#' Apply a per-patch function over patch groups, optionally in parallel
+#'
+#' Runs \code{fn} over the elements of \code{groups} (one per patch) with
+#' \code{\link[parallel]{mclapply}} when \code{cores > 1}, else \code{lapply}.
+#' mclapply forks (copy-on-write), so the big shared vectors are not serialised;
+#' on Windows \code{cores > 1} degrades to serial automatically. Output order
+#' always matches input order, so results stay deterministic regardless of cores.
+#'
+#' @param groups A list (e.g. from \code{split}) of per-patch cell positions.
+#' @param fn A function of one group element returning that patch's local labels.
+#' @param cores Integer worker count (\code{1} = serial).
+#' @return A list the same length/order as \code{groups}.
+#' @keywords internal
+papply <- function(groups, fn, cores = 1) {
+  if (cores > 1L) {
+    res <- parallel::mclapply(groups, fn, mc.cores = cores)
+    bad <- vapply(res, inherits, logical(1), "try-error")
+    if (any(bad)) stop("parallel subdivision failed in ", sum(bad), " patch(es): ",
+                       conditionMessage(attr(res[[which(bad)[1]]], "condition")))
+    res
+  } else {
+    lapply(groups, fn)
+  }
+}
+
+#' Stitch per-patch local unit labels into one globally-numbered vector
+#'
+#' Each patch's worker returns labels \code{1..k_i} local to that patch; this
+#' offsets them by the running total so the final ids are \code{1..N} in patch
+#' order -- identical whatever order the workers finished in.
+#'
+#' @param groups List of per-patch cell positions (as passed to \code{\link{papply}}).
+#' @param labs List of per-patch local label vectors (from \code{\link{papply}}).
+#' @param n Length of the output (number of suitable cells).
+#' @return Integer vector of global unit ids, length \code{n}.
+#' @keywords internal
+stitch_units <- function(groups, labs, n) {
+  unit <- integer(n)
+  off <- 0L
+  for (i in seq_along(groups)) {
+    unit[groups[[i]]] <- labs[[i]] + off
+    off <- off + max(labs[[i]])
+  }
+  unit
+}
+
 #' Subdivide oversized patches by suitability banding
 #'
 #' For each patch larger than \code{trig_ac} acres: cut cells into fixed suitability
@@ -276,74 +326,50 @@ kcap <- function(gc, capn, nc) {
 #' @param band_minac Numeric per-band minimum size (acres) for \code{\link{snap_pieces}}.
 #' @param trig_ac Only patches larger than this (acres) are banded.
 #' @param cap_cells Maximum final unit size in cells (geometric cap).
-#' @param seed Random seed for the k-means cap (reproducible splits).
+#' @param seed Base random seed. Each patch is seeded \code{seed + patch id}, so its
+#'   split is reproducible and \strong{independent of patch order / core count}.
+#' @param cores Integer worker count for \code{\link{papply}} (\code{1} = serial).
 #' @return Integer vector (same length as \code{cells}) of subpatch unit ids.
 #' @seealso \code{\link{delineate_patches}}, \code{\link{snap_pieces}}, \code{\link{kcap}}
 #' @export
-band_subpatches <- function(
-  cells,
-  memb,
-  pval,
-  nc,
-  nr,
-  cell_area,
-  band_brks,
-  band_minac,
-  trig_ac,
-  cap_cells,
-  seed = 1
-) {
-  set.seed(seed)
-  ac_per_m2 <- 1 / 4046.856
-  allids <- as.integer(names(table(memb)))
-  unit <- integer(length(cells))
-  nu <- 0L
+band_subpatches <- function(cells, memb, pval, nc, nr, cell_area,
+                            band_brks, band_minac, trig_ac, cap_cells,
+                            seed = 1, cores = 1) {
+  # Each patch is independent: label its cells 1..k locally, then stitch globally.
+  groups <- split(seq_along(memb), memb)
 
-  for (P in allids) {
-    sel <- which(memb == P)
+  one_patch <- function(sel) {
     gc <- cells[sel]
 
-    # Small patch -> one survey unit, untouched.
-    if (length(gc) * cell_area * ac_per_m2 <= trig_ac) {
-      nu <- nu + 1L
-      unit[sel] <- nu
-      next
-    }
+    # Small patch -> one survey unit, untouched (no RNG used).
+    if (length(gc) * cell_area / M2_PER_ACRE <= trig_ac) return(rep(1L, length(gc)))
 
-    # Contour into bands, then same-band connected pieces. pval is aligned to
-    # `cells`, so this patch's probabilities are pval[sel] (sel indexes `cells`).
-    vb <- as.integer(cut(pval[sel], band_brks, right = FALSE))
-    E <- rook_edges(gc, nc, nr)
-    ei <- E$i
-    ej <- E$j
-    same <- vb[ei] == vb[ej]
-    piece <- comp_labels(length(gc), ei[same], ej[same])
-    np <- max(piece)
-    # band of each piece = band of its first cell (cells in a piece share a band);
-    # match() is ~6x faster here than tapply(.,., `[`, 1).
-    pband <- vb[match(seq_len(np), piece)]
-    parea <- as.numeric(tabulate(piece)) * cell_area * ac_per_m2
+    set.seed(seed + memb[sel[1]])   # deterministic per-patch seed (order-independent)
 
-    # Snap sub-threshold pieces into their best neighbour.
-    root <- snap_pieces(piece, ei, ej, parea, pband, band_minac)
-    uroot <- root[piece]
+    # Contour into bands, then same-band connected pieces (pval[sel] = this patch's probs).
+    vb    <- as.integer(cut(pval[sel], band_brks, right = FALSE))
+    E     <- rook_edges(gc, nc, nr); ei <- E$i; ej <- E$j
+    same  <- vb[ei] == vb[ej]
+    piece <- comp_labels(length(gc), ei[same], ej[same]); np <- max(piece)
+    pband <- vb[match(seq_len(np), piece)]       # band of each piece (constant within a piece)
+    parea <- as.numeric(tabulate(piece)) * cell_area / M2_PER_ACRE
 
-    # Geometric cap on any surviving unit still too big.
+    # Snap sub-threshold pieces into their best neighbour, then geometrically cap.
+    uroot <- snap_pieces(piece, ei, ej, parea, pband, band_minac)[piece]
+    out <- integer(length(gc)); k <- 0L
     for (u in unique(uroot)) {
       iu <- which(uroot == u)
       if (length(iu) <= cap_cells) {
-        nu <- nu + 1L
-        unit[sel[iu]] <- nu
+        k <- k + 1L; out[iu] <- k
       } else {
         cl <- kcap(gc[iu], cap_cells, nc)
-        for (k in unique(cl)) {
-          nu <- nu + 1L
-          unit[sel[iu[cl == k]]] <- nu
-        }
+        for (c in unique(cl)) { k <- k + 1L; out[iu[cl == c]] <- k }
       }
     }
+    out
   }
-  unit
+
+  stitch_units(groups, papply(groups, one_patch, cores), length(cells))
 }
 
 #' Subdivide oversized patches by a compact geometric cap (k-means lever)
@@ -360,21 +386,21 @@ band_subpatches <- function(
 #' @param nc Number of columns in the parent raster (for col/row recovery in \code{\link{kcap}}).
 #' @param cell_area Area of one cell (m^2).
 #' @param max_area_ac Maximum unit size (acres).
-#' @param seed Random seed for reproducible k-means splits.
+#' @param seed Base random seed; each patch is seeded \code{seed + patch id} so its
+#'   split is reproducible and independent of patch order / core count.
+#' @param cores Integer worker count for \code{\link{papply}} (\code{1} = serial).
 #' @return Integer vector (same length as \code{cells}) of subpatch unit ids.
 #' @seealso \code{\link{band_subpatches}}, \code{\link{kcap}}
 #' @export
-cap_subpatches <- function(cells, memb, nc, cell_area, max_area_ac, seed = 1) {
-  set.seed(seed)
-  cap_cells <- floor(max_area_ac * 4046.856 / cell_area)
-  allids <- as.integer(names(table(memb)))
-  unit <- integer(length(cells)); nu <- 0L
-  for (P in allids) {
-    sel <- which(memb == P); gc <- cells[sel]
-    cl <- kcap(gc, cap_cells, nc)             # rep(1L, .) when already under the cap
-    for (k in unique(cl)) { nu <- nu + 1L; unit[sel[cl == k]] <- nu }
+cap_subpatches <- function(cells, memb, nc, cell_area, max_area_ac,
+                           seed = 1, cores = 1) {
+  cap_cells <- floor(max_area_ac * M2_PER_ACRE / cell_area)
+  groups <- split(seq_along(memb), memb)
+  one_patch <- function(sel) {
+    set.seed(seed + memb[sel[1]])               # deterministic per-patch seed
+    kcap(cells[sel], cap_cells, nc)             # rep(1L, .) when already under the cap
   }
-  unit
+  stitch_units(groups, papply(groups, one_patch, cores), length(cells))
 }
 
 # ---------------------------------------------------------------------------
@@ -406,22 +432,6 @@ unit_prob <- function(val, grp) {
     n         = lengths(s),
     row.names = NULL
   )
-}
-
-#' Ids of the regions a point set lands on
-#'
-#' Overlay occurrence points on a label raster and return the sorted unique
-#' (non-\code{NA}) ids they fall on -- the occupied patches/units. A point below the
-#' suitability threshold lands off every region (\code{NA}) and is dropped here.
-#'
-#' @param id_rast A \pkg{terra} \code{SpatRaster} of integer region ids.
-#' @param occ_pts A \pkg{terra} \code{SpatVector} of occurrence points (same CRS).
-#' @return Sorted integer vector of occupied ids.
-#' @keywords internal
-#' @export
-occupied_ids <- function(id_rast, occ_pts) {
-  hit <- terra::extract(id_rast, occ_pts)[, 2]
-  sort(unique(hit[!is.na(hit)]))
 }
 
 #' Scatter a per-suitable-cell label vector back into a raster
@@ -460,6 +470,32 @@ aoa_fraction <- function(di, id_rast, aoa_thresh = 1) {
   stats::setNames(fr, c("id", "frac_in_aoa"))
 }
 
+#' Crop a raster to the bounding box of a cell set
+#'
+#' \code{terra::as.polygons} scans the whole grid, so its cost tracks the raster
+#' \emph{extent}, not the number of data cells. When the data is spatially localised,
+#' cropping to its bounding box first is a large speed-up; when it spans the whole
+#' extent, cropping only adds overhead. The bounding box is computed arithmetically
+#' from \code{cells} (no raster scan), and the crop is skipped unless the box is
+#' smaller than \code{frac} of the full extent, so it never hurts.
+#'
+#' @param x A \code{SpatRaster}.
+#' @param cells Integer global cell indices of the data cells.
+#' @param frac Crop only when the data bounding box is below this fraction of the
+#'   full extent (default 0.5).
+#' @return \code{x} cropped to the data bounding box, or \code{x} unchanged.
+#' @keywords internal
+crop_to_cells <- function(x, cells, frac = 0.5) {
+  ncx <- terra::ncol(x); nrx <- terra::nrow(x)
+  rr <- (cells - 1L) %/% ncx; cc <- (cells - 1L) %% ncx
+  r0 <- min(rr); r1 <- max(rr); c0 <- min(cc); c1 <- max(cc)
+  if ((r1 - r0 + 1) * (c1 - c0 + 1) >= frac * as.double(nrx) * ncx) return(x)
+  xr <- terra::xres(x); yr <- terra::yres(x)
+  e <- terra::ext(terra::xmin(x) + c0 * xr, terra::xmin(x) + (c1 + 1) * xr,
+                  terra::ymax(x) - (r1 + 1) * yr, terra::ymax(x) - r0 * yr)
+  terra::crop(x, e)
+}
+
 #' Dissolve a label raster to polygons and attach attributes
 #'
 #' Polygonise \code{id_rast} (one feature per id) and left-join \code{attrs} on the id
@@ -487,7 +523,7 @@ polygonize_units <- function(id_rast, attrs) {
 #' (\code{\link{delineate_patches}}), subdivides each oversized patch by the chosen
 #' lever (\code{method = "band"} -> \code{\link{band_subpatches}};
 #' \code{method = "kmeans"} -> \code{\link{cap_subpatches}}), scores per-unit and
-#' per-patch probability (\code{\link{unit_prob}}), occupancy (\code{\link{occupied_ids}}),
+#' per-patch probability (\code{\link{unit_prob}}), occupancy (a single point overlay),
 #' acreage, priority band, and optional AOA tag, and returns both the patch- and
 #' unit-level results plus a one-row summary. Only the \strong{suitable} cells are
 #' ever read into memory (via \code{terra::cells} + indexed reads), so peak memory
@@ -508,7 +544,11 @@ polygonize_units <- function(id_rast, attrs) {
 #' @param work_dir Directory for the watershed intermediate rasters (defaults to a temp dir).
 #' @param cache_dir Optional directory to memoise the patch/unit rasters; \code{NULL} disables.
 #' @param out_gpkg Optional path to write (and cache) the unit polygons.
-#' @param seed Random seed for the k-means steps.
+#' @param seed Base random seed for the k-means steps (applied per patch; see
+#'   \code{\link{band_subpatches}}).
+#' @param cores Integer worker count for the per-patch subdivision (\code{1} = serial).
+#'   Output is identical for any core count, so \code{cores} only affects speed, not
+#'   the result or the cache. Forks via \pkg{parallel}; serial on Windows.
 #' @return A list: \code{patch_raster}, \code{unit_raster} (\code{SpatRaster}s);
 #'   \code{patches}, \code{units} (per-patch and per-unit attribute tables);
 #'   \code{polygons} (unit \code{SpatVector}); and \code{summary} (one-row data.frame).
@@ -523,7 +563,7 @@ survey_units <- function(pr, occ_pts,
                          max_area_ac = 10,
                          aoa_di = NULL, aoa_thresh = 1,
                          work_dir = tempdir(), cache_dir = NULL,
-                         out_gpkg = NULL, seed = 1) {
+                         out_gpkg = NULL, seed = 1, cores = 1) {
   method <- match.arg(method)
   if (is.character(pr))      pr      <- terra::rast(pr)
   if (is.character(occ_pts)) occ_pts <- terra::vect(occ_pts)
@@ -544,7 +584,6 @@ survey_units <- function(pr, occ_pts,
 
   nc <- terra::ncol(patch_id); nr <- terra::nrow(patch_id)
   cell_area <- prod(terra::res(patch_id))
-  ac_per_m2 <- 1 / 4046.856
 
   # suitable cells only: never materialise the full surface
   cells <- terra::cells(patch_id)
@@ -552,7 +591,10 @@ survey_units <- function(pr, occ_pts,
   pval  <- pr[cells][, 1]
 
   # --- Stage 2: subdivide (cached) -------------------------------------------
-  usig <- paste(base_sig, method, seed,
+  # "subdiv2" tags the per-patch-seed scheme so caches from the old global-seed
+  # scheme invalidate. cores is NOT in the signature: output is identical for any
+  # core count, so switching cores reuses the cache.
+  usig <- paste(base_sig, "subdiv2", method, seed,
                 if (method == "band") {
                   paste(paste(band_brks, collapse = ","),
                         paste(band_minac, collapse = ","), trig_ac, maxcap_ac, sep = "|")
@@ -561,11 +603,11 @@ survey_units <- function(pr, occ_pts,
     cd(paste0("units_", method, ".tif")), cd(paste0("units_", method, ".sig")), usig,
     function() {
       u <- if (method == "band") {
-        cap_cells <- floor(maxcap_ac * 4046.856 / cell_area)
+        cap_cells <- floor(maxcap_ac * M2_PER_ACRE / cell_area)
         band_subpatches(cells, memb, pval, nc, nr, cell_area,
-                        band_brks, band_minac, trig_ac, cap_cells, seed)
+                        band_brks, band_minac, trig_ac, cap_cells, seed, cores)
       } else {
-        cap_subpatches(cells, memb, nc, cell_area, max_area_ac, seed)
+        cap_subpatches(cells, memb, nc, cell_area, max_area_ac, seed, cores)
       }
       labels_to_raster(patch_id, cells, u, "unit")
     })
@@ -573,12 +615,11 @@ survey_units <- function(pr, occ_pts,
   unit <- unit_rast[cells][, 1]
   nu   <- max(unit)
 
-  # --- Attributes (from the in-memory vectors; no extra raster scans) --------
+  # --- Unit attributes (from the in-memory vectors; no extra raster scans) ---
   ap <- unit_prob(pval, unit); names(ap)[1] <- "unit"
   ap$patch  <- memb[match(ap$unit, unit)]            # parent patch (constant within unit)
-  ap$acres  <- ap$n * cell_area * ac_per_m2
+  ap$acres  <- ap$n * cell_area / M2_PER_ACRE
   if (method == "band") ap$band <- as.integer(cut(ap$prob_max, band_brks, right = FALSE))
-  ap$occupied <- ap$unit %in% occupied_ids(unit_rast, occ_pts)
   if (!is.null(aoa_di)) {
     if (is.character(aoa_di)) aoa_di <- terra::rast(aoa_di)
     fr <- aoa_fraction(aoa_di, unit_rast, aoa_thresh)
@@ -588,14 +629,31 @@ survey_units <- function(pr, occ_pts,
     ap$frac_in_aoa <- NA_real_; ap$in_aoa <- NA
   }
 
-  # patch-level table (for the patch-scale DCA)
-  pp <- unit_prob(pval, memb); names(pp)[1] <- "patch"
-  pp$acres <- pp$n * cell_area * ac_per_m2
-  phit <- terra::extract(patch_id, occ_pts)[, 2]
-  occ_p <- sort(unique(phit[!is.na(phit)]))
+  # --- Patch-level table: roll the unit stats up to their parent patch -------
+  # Patch stats are exact aggregates of their units' (min of mins, max of maxes,
+  # n-weighted mean, summed n), so an un-split patch (one unit) is a copy and no
+  # patch is re-reduced from the cell values a second time.
+  g  <- ap$patch
+  pn <- tapply(ap$n, g, sum)
+  pp <- data.frame(
+    patch     = as.integer(names(pn)),
+    prob_min  = as.numeric(tapply(ap$prob_min, g, min)),
+    prob_max  = as.numeric(tapply(ap$prob_max, g, max)),
+    prob_mean = as.numeric(tapply(ap$prob_mean * ap$n, g, sum)) / as.numeric(pn),
+    n         = as.numeric(pn),
+    row.names = NULL)
+  pp$acres <- pp$n * cell_area / M2_PER_ACRE
+
+  # --- Occupancy: one point overlay on the unit raster --------------------
+  # units and patches share the exact suitable footprint, so this single extract
+  # gives occupied units, occupied patches (via parent), and the off-patch counts.
+  uhit  <- terra::extract(unit_rast, occ_pts)[, 2]
+  occ_u <- sort(unique(uhit[!is.na(uhit)]))
+  occ_p <- sort(unique(ap$patch[match(occ_u, ap$unit)]))
+  ap$occupied <- ap$unit  %in% occ_u
   pp$occupied <- pp$patch %in% occ_p
-  n_points     <- length(phit)
-  n_points_off <- sum(is.na(phit))                   # presences off every patch
+  n_points     <- length(uhit)
+  n_points_off <- sum(is.na(uhit))                   # presences off every patch
 
   # --- Polygons (cached when out_gpkg is given) ------------------------------
   gsigp <- if (!is.null(out_gpkg)) paste0(out_gpkg, ".sig") else NULL
@@ -603,7 +661,8 @@ survey_units <- function(pr, occ_pts,
       identical(readLines(gsigp, warn = FALSE), usig)) {
     polys <- terra::vect(out_gpkg)
   } else {
-    polys <- polygonize_units(unit_rast, ap)
+    # as.polygons is extent-bound; crop to the data bbox first when it shrinks things.
+    polys <- polygonize_units(crop_to_cells(unit_rast, cells), ap)
     if (!is.null(out_gpkg)) {
       terra::writeVector(polys, out_gpkg, overwrite = TRUE)
       writeLines(usig, gsigp)
