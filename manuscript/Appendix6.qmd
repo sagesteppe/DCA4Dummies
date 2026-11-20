@@ -136,7 +136,7 @@ npatch <- surv$n_patches[1]
 
 ```{r fig-survival}
 #| label: fig-delta-survival
-#| fig-cap: "Cores recovered per patch as delta is relaxed, drawn as an elbow (scree) plot: delta runs from coarse (0.25, left) to fine (0.05, right), so moving rightward splits more. Reading it this way, the curve stays flat while only genuine, well-separated cores are being resolved, then bends upward into the regime where relaxing delta further buys mostly noise cores. The bend — the elbow near delta = 0.1 (dotted) — is the operating point: split down to it, not past it. The region below 0.05 (off-frame right) is the noise explosion toward hundreds of cores per patch."
+#| fig-cap: "Peak-survival curve: mean cores recovered per patch as delta rises. Each point is a count of cores whose prominence exceeds that delta (plus the one global peak). The curve is smooth and monotone — no plateau, no shoulder — so no single delta is singled out by the data. The dashed line is the Analyses.qmd default (0.05); the dotted line is the stopping-rule value derived below."
 d_stop <- {
   g <- surv[round(delta, 3) %in% c(0.05, 0.10, 0.15, 0.20, 0.25)][order(-delta)]
   g[, added := c(NA, diff(peaks_per_patch))]       # cores gained by stepping delta DOWN into this row
@@ -145,12 +145,12 @@ d_stop <- {
 }
 ggplot(surv, aes(delta, peaks_per_patch)) +
   geom_line(linewidth = 1, colour = "#2b6cb0") +
+  geom_vline(xintercept = 0.05, linetype = "dashed", colour = "grey45") +
   geom_vline(xintercept = d_stop, linetype = "dotted", colour = "#c05621", linewidth = 0.8) +
-  scale_x_reverse(breaks = seq(0.05, 0.25, 0.05)) +            # coarse (0.25) -> fine (0.05): climbs rightward
-  coord_cartesian(xlim = c(0.25, 0.05), ylim = c(0, 5)) +      # operational window; noise explosion below 0.05 is off-frame
-  labs(x = expression("Prominence threshold  " * delta * "   (coarse " %->% " fine; more splitting " %->% ")"),
+  scale_x_continuous(breaks = seq(0, 0.25, 0.05)) +
+  labs(x = expression("Prominence threshold  " * delta * "  (probability units)"),
        y = "Mean cores recovered per patch",
-       title = "Cores recovered as delta relaxes — an elbow near 0.1") +
+       title = "Cores recovered per delta — a smooth decay, not a staircase with a step") +
   theme_cda()
 ```
 

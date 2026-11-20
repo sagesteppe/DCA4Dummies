@@ -16,8 +16,11 @@
 #' scatter); \code{ratio_high}, \code{ratio_low} (prevalence-sweep gradient ends).
 #' @export
 cda_cols <- local({
-  path <- file.path(if (exists("HERE", inherits = TRUE)) get("HERE", inherits = TRUE) else "..",
-                    "R", "palette.csv")
+  path <- file.path(
+    if (exists("HERE", inherits = TRUE)) get("HERE", inherits = TRUE) else "..",
+    "R",
+    "palette.csv"
+  )
   tab <- utils::read.csv(path, stringsAsFactors = FALSE)
   stats::setNames(trimws(tab$hex), trimws(tab$role))
 })
@@ -35,8 +38,10 @@ cda_cols <- local({
 #' @export
 theme_cda <- function(base_size = 11, legend = "bottom") {
   ggplot2::theme_bw(base_size = base_size) +
-    ggplot2::theme(legend.position = legend,
-                   plot.caption = ggplot2::element_text(colour = "grey45"))
+    ggplot2::theme(
+      legend.position = legend,
+      plot.caption = ggplot2::element_text(colour = "grey45")
+    )
 }
 
 #' Linetype scale for the decision-curve reference strategies
@@ -48,8 +53,12 @@ theme_cda <- function(base_size = 11, legend = "bottom") {
 #' @export
 scale_linetype_reference <- function() {
   ggplot2::scale_linetype_manual(
-    values = c("Survey all (treat-all)" = "12", "Survey none (treat-none)" = "solid"),
-    guide = "none")
+    values = c(
+      "Survey all (treat-all)" = "12",
+      "Survey none (treat-none)" = "solid"
+    ),
+    guide = "none"
+  )
 }
 
 #' Natural-prevalence colour gradient for the prevalence sweeps
@@ -62,7 +71,10 @@ scale_linetype_reference <- function() {
 #' @export
 scale_colour_ratio <- function() {
   ggplot2::scale_colour_gradient(
-    name = "natural\nprevalence", trans = "log",
+    name = "natural\nprevalence",
+    trans = "log",
     breaks = c(0.02, 0.05, 0.1, 0.25, 0.5),
-    low = cda_cols[["ratio_high"]], high = cda_cols[["ratio_low"]])
+    low = cda_cols[["ratio_high"]],
+    high = cda_cols[["ratio_low"]]
+  )
 }

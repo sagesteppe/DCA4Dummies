@@ -142,62 +142,9 @@ fresh <- file.exists(patches_tif) && file.exists(sig_file) &&
 if (fresh) {
   patch_id <- terra::rast(patches_tif)
 } else {
-  mask <- pr >= sens_spec
-
-  # Marker-controlled watershed via the hydrological inversion trick: invert the
-  # probability surface so high-probability cores become pits, merge necks
-  # shallower than delta (fill max_depth), label the surviving pits as seeds,
-  # then route every suitable cell to the core it drains into. Intermediates
-  # persist to data/raster so a partial re-run can reuse the finished steps.
-  dem <- terra::ifel(mask, 1 - pr, NA)                 # cores -> pits
-  terra::writeRaster(dem, file.path(rdir, "patch-dem.tif"), overwrite = TRUE)
-  whitebox::wbt_fill_depressions(
-    file.path(rdir, "patch-dem.tif"),
-    file.path(rdir, "patch-fill.tif"),
-    max_depth = delta
-    )
-  whitebox::wbt_sink(
-    file.path(rdir, "patch-fill.tif"),
-    file.path(rdir, "patch-sink.tif"),
-    zero_background = TRUE
-    )
-  whitebox::wbt_d8_pointer(
-    file.path(rdir, "patch-fill.tif"),
-    file.path(rdir, "patch-pntr.tif")
-    )
-  whitebox::wbt_watershed(
-    file.path(rdir, "patch-pntr.tif"),
-    file.path(rdir, "patch-sink.tif"),
-    file.path(rdir, "patch-seg.tif")
-    )
-
-  seg <- terra::rast(file.path(rdir, "patch-seg.tif"))
-  seg[seg <= 0] <- NA
-
-  # Fallback: suitable cells that drain off-mask (no interior pit, e.g. small
-  # patches) keep an identity via rook's-case (4-connected) components, so none
-  # are dropped. Rook rather than queen: diagonal-only touches are treated as
-  # separate patches, which fragments less artificially at this resolution and
-  # yields patches that make more sense as ground units (expect a higher count).
-  unlab <- mask & is.na(seg)
-  cc <- terra::patches(
-    terra::ifel(unlab, 1, NA),
-    directions = 4,
-    zeroAsNA = TRUE
-    ) +
-    terra::global(seg, "max", na.rm = TRUE)[[1]]
-
-  patch_id <- terra::mask(terra::cover(seg, cc), mask, maskvalues = c(NA, 0))
-
-  # Drop sub-threshold slivers: patches whose total area is at or below min_area
-  # are too small to be a meaningful survey unit, so we null them out here (once)
-  # and bake the filter into the cached raster, so every downstream step inherits
-  # it. Area is cell count x cell area; terra area/perimeter isn't needed on a
-  # projected (equal-area-enough) grid.
-  cell_area <- prod(terra::res(patch_id))
-  fr        <- terra::freq(patch_id)
-  keep_ids  <- fr$value[fr$count * cell_area > min_area]
-  patch_id  <- terra::ifel(patch_id %in% keep_ids, patch_id, NA)
+  # Stage 1 (watershed -> patches): binarize, marker-controlled watershed with a
+  # rook's-case fallback, and the min_area sliver filter. See R/fn_patches.R.
+  patch_id <- delineate_patches(pr, sens_spec, delta, min_area, rdir)
 
   # persist the delineated (and size-filtered) patches, record the signature
   terra::writeRaster(patch_id, patches_tif, overwrite = TRUE)
@@ -403,68 +350,15 @@ freshb <- file.exists(subpatchb_tif) && file.exists(subpatchb_sig) &&
 if (freshb) {
   subpatchb_id <- terra::rast(subpatchb_tif)
 } else {
-  set.seed(1)
   pid <- terra::values(patch_id)[, 1]; prv <- terra::values(pr)[, 1]
   cells <- which(!is.na(pid)); memb <- pid[cells]
 
-  # --- base-R helpers (no igraph / whitebox) ---------------------------------
-  # rook (east/south) adjacency among a set of global cells -> local index pairs
-  rook_edges <- function(gc) {
-    r <- (gc - 1L) %/% nc; c <- (gc - 1L) %% nc
-    eE <- gc[c < nc - 1L]; jE <- match(eE + 1L,  gc); okE <- !is.na(jE)
-    eS <- gc[r < nr - 1L]; jS <- match(eS + nc,  gc); okS <- !is.na(jS)
-    list(i = c(match(eE[okE], gc), match(eS[okS], gc)), j = c(jE[okE], jS[okS]))
-  }
-  # connected components (union-find) over n nodes given an edge subset -> 1..m labels
-  uf_comp <- function(n, ei, ej) {
-    parent <- seq_len(n)
-    find <- function(x) { while (parent[x] != x) { parent[x] <<- parent[parent[x]]; x <- parent[x] }; x }
-    if (length(ei)) for (k in seq_along(ei)) { a <- find(ei[k]); b <- find(ej[k]); if (a != b) parent[a] <- b }
-    match(vapply(seq_len(n), find, integer(1)), unique(vapply(seq_len(n), find, integer(1))))
-  }
-  # split a cell set into ceil(area/cap) compact k-means pieces, each <= cap cells
-  kcap <- function(gc, capn) {
-    n <- length(gc); if (n <= capn) return(rep(1L, n))
-    xy <- cbind((gc - 1L) %% nc, (gc - 1L) %/% nc); k <- as.integer(ceiling(n / capn))
-    repeat { km <- stats::kmeans(xy, centers = k, iter.max = 100)
-             if (max(tabulate(km$cluster)) <= capn) break; k <- k + 1L }
-    km$cluster
-  }
+  # Stage 2 (contour -> snap -> k-means cap): band each oversized patch, snap
+  # sub-threshold pieces into their best neighbour, then geometrically cap.
+  # Helpers (rook_edges / uf_comp / snap_pieces / kcap) live in R/fn_patches.R.
+  unit <- band_subpatches(cells, memb, prv, nc, nr, cell_area,
+                          band_brks, band_minac, trig_ac, cap_cells, seed = 1)
 
-  allids <- as.integer(names(table(memb)))
-  unit <- integer(length(cells)); nu <- 0L
-  for (P in allids) {
-    sel <- which(memb == P); gc <- cells[sel]
-    if (length(gc) * cell_area / 4046.856 <= trig_ac) {   # small patch -> one unit
-      nu <- nu + 1L; unit[sel] <- nu; next
-    }
-    vb <- as.integer(cut(prv[gc], band_brks, right = FALSE))   # band per cell
-    E  <- rook_edges(gc); ei <- E$i; ej <- E$j
-    same  <- vb[ei] == vb[ej]                                  # band-pieces: same-band components
-    piece <- uf_comp(length(gc), ei[same], ej[same]); np <- max(piece)
-    pband <- as.integer(tapply(vb, piece, `[`, 1)[as.character(seq_len(np))])
-    parea <- as.numeric(tabulate(piece)) * cell_area / 4046.856
-    dif   <- piece[ei] != piece[ej]                            # region adjacency graph (within patch)
-    rag   <- if (any(dif)) unique(t(apply(cbind(piece[ei[dif]], piece[ej[dif]]), 1, sort))) else matrix(0L, 0, 2)
-    adj   <- vector("list", np)
-    if (nrow(rag)) for (e in seq_len(nrow(rag))) { a <- rag[e, 1]; b <- rag[e, 2]
-      adj[[a]] <- c(adj[[a]], b); adj[[b]] <- c(adj[[b]], a) }
-    # sequential snap: absorb each sub-threshold piece into its highest-band neighbour
-    parent <- seq_len(np); arr <- parea; brr <- pband
-    find <- function(x) { while (parent[x] != x) { parent[x] <<- parent[parent[x]]; x <- parent[x] }; x }
-    for (pass in 1:3) { did <- 0L
-      for (p in order(arr)) { rp <- find(p); if (arr[rp] >= band_minac[brr[rp]]) next
-        nb <- adj[[p]]; if (is.null(nb)) next
-        rr <- unique(vapply(nb, find, integer(1))); rr <- rr[rr != rp]; if (!length(rr)) next
-        tgt <- rr[order(-brr[rr], -arr[rr])][1]; parent[rp] <- tgt; arr[tgt] <- arr[tgt] + arr[rp]; did <- did + 1L }
-      if (did == 0) break }
-    uroot <- vapply(piece, find, integer(1))
-    # geometric cap: split any surviving unit above maxcap into compact pieces
-    for (u in unique(uroot)) { iu <- which(uroot == u)
-      if (length(iu) <= cap_cells) { nu <- nu + 1L; unit[sel[iu]] <- nu }
-      else { cl <- kcap(gc[iu], cap_cells)
-             for (k in unique(cl)) { nu <- nu + 1L; unit[sel[iu[cl == k]]] <- nu } } }
-  }
   subpatchb_id <- terra::rast(patch_id)
   sv <- rep(NA_integer_, terra::ncell(patch_id)); sv[cells] <- unit
   terra::values(subpatchb_id) <- sv
