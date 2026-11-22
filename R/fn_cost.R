@@ -68,8 +68,13 @@ build_resistance <- function(
     if (!is.null(oceans)) res[oceans == 1] <- res[oceans == 1] + w_ocean
     if (!is.null(lakes))  res[lakes  == 1] <- res[lakes  == 1] + w_lakes
     if (!is.null(rivers)) res[rivers == 1] <- res[rivers == 1] + w_rivers
-    if (!is.null(tri))
-      res <- res + w_tri * terra::setValues(res, scale(terra::values(tri)))
+    if (!is.null(tri)) {
+      # NA-robust z-score (base scale() uses colMeans w/o na.rm, so a single NA
+      # border cell would blank the whole layer).
+      tv <- terra::values(tri)[, 1]
+      z <- (tv - mean(tv, na.rm = TRUE)) / stats::sd(tv, na.rm = TRUE)
+      res <- res + w_tri * terra::setValues(res, z)
+    }
     if (!is.null(habitat)) res <- res + w_habitat * habitat
     if (!is.null(addtl_r) && terra::nlyr(addtl_r) == length(addtl_w))
       for (i in seq_along(addtl_w)) res <- res + addtl_r[[i]] * addtl_w[i]
@@ -113,7 +118,7 @@ tobler_friction <- function(dem) {
 #' @return a single-layer \code{SpatRaster} on \eqn{[0, 1]}.
 #' @export
 geo_distance <- function(sources, template, invert = FALSE) {
-  d <- terra::distance(template, terra::vect(sources))
+  d <- terra::distance(template, .as_vect(sources))
   .rescale01(d, invert)
 }
 
@@ -141,7 +146,7 @@ geo_distance <- function(sources, template, invert = FALSE) {
 cost_distance <- function(friction, sources, template = friction, tile = FALSE,
                           k = 2, buffer_m = 3000, max_cells = NULL, seed = 1,
                           invert = FALSE) {
-  src <- terra::vect(sources)
+  src <- .as_vect(sources)
 
   if (!tile) {
     cd <- .costdist_tile(friction, src)
@@ -166,6 +171,9 @@ cost_distance <- function(friction, sources, template = friction, tile = FALSE,
 # ---------------------------------------------------------------------------
 # internal
 # ---------------------------------------------------------------------------
+
+# Coerce to SpatVector only if not already one (sf / SpatVector both accepted).
+.as_vect <- function(x) if (inherits(x, "SpatVector")) x else terra::vect(x)
 
 # One costDist over a (possibly cropped) friction tile: burn sources in as the
 # zero-cost target, then accumulate cost. Sources sit at value 0; the friction floor

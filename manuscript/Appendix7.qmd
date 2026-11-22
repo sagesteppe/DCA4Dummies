@@ -3,53 +3,59 @@ title: "Priority Ranking of Patches"
 format: html
 ---
 
-RankIndex = Dg + Dr + S + A + C
+Each term is rescaled to $[0,1]$ and oriented so **higher = higher survey priority**; the index is their (optionally weighted) sum. $\widetilde{\,\cdot\,}$ denotes a min–max rescale.
 
+$$\text{Rank}(x) = D_g + D_r + S + A + C$$
 
-### Dispersal Terms: 
+### Dispersal
 
-**Dg**: Geographic distance from a known population
+Models the likelihood of propagules to reach a patch of suitable habitat. 
 
-"Patches with shorter distances are more likely to be occupied"
+**Dg — geographic distance.** Geographic distance from a known population $\{o_k\}$.
 
-**Dr**: Resistance distance from a known population
+> *Patches with shorter distances are more likely to be occupied.*
 
-"Patches with lower values, and less geographic distance, are more likely to be occupied"
+$$D_g(x) = 1 - \widetilde{\min_k \lVert x - o_k \rVert}$$
 
-### Historic Survey Effort Term:
+**Dr — resistance distance.** Resistance distance from a known population $R$.
 
-**S**: Survey Intensity (i.e. bias surface)
+> *Patches with lower values, and less geographic distance, are more likely to be occupied.*
 
-"Well surveyed patches are less likely to be occupied, but undocumented as having the population"
+$$D_r(x) = 1 - \widetilde{\min_k \; \mathrm{cost}_R(x, o_k)}$$
 
-Continuous Gaussian field from target-group records (GBIF pull), **not** a binned grid — a raster is just a view at any resolution.
+### Historic survey effort
+
+Models patches with higher survey efforts are more likely to not have an undocumented presence.
+
+**S — survey intensity (bias surface).** Well-surveyed ground is *less* likely to still hide an undocumented population. A continuous Gaussian field of target-group records. 
+
+> *Well-surveyed patches are less likely to have an undocumented population.*
 
 $$S(x)=\sum_j w_j \sum_{i\in j}\exp\!\left(-\frac{\lVert x-p_{ij}\rVert^2}{2\sigma^2}\right)$$
 
-- **Additive** over species (outer sum); field = one pass, no per-species surfaces.\rVert^2}{2\sigma^2}\right)$$
+- **Additive** over species $j$ (one pass, no per-species surfaces).
+- **Weight** $w_j=(\varphi_j/n_j)^{\text{damp}}$: inverse frequency, $\varphi_j$ = share of the species' p95 box inside the domain. Since $\varphi\le1\le n$, $w\in(0,1]$ — no cap.
+- Floor species at $n_j \ge 5$; plots (FIA/AIM/VegBank) collapse to one point at $w=1$. $\sigma=100$ m, kernel cut at $4\sigma$.
+- Into the index as **sparsity** $1-\tilde S$ (rescaled by the 0.95 quantile, not the max).
 
-- **Additive** over species (outer sum); field = one pass, no per-species surfaces.
-- **Weight** $w_j=(\varphi_j/n_j)^{\text{damp}}$: inverse frequency, $\varphi_j$ = proportion of species' p95 bbox inside domain. $\varphi\le1\le n \Rightarrow w\in(0,1]
-- **Weight** $w_j=(\varphi_j/n_j)^{\text{damp}}$: inverse frequency, $\varphi_j$ = proportion of species' p95 bbox inside domain. $\varphi\le1\le n \Rightarrow w\in(0,1]$, no cap needed.
-- **Floor**: drop species with < 5 records. **$\sigma$ = 100 m**, kernel truncated at $4\sigma$.
-- **Plots** (FIA/AIM/VegBank — complete inventories): d\rVert^2}{2\sigma^2}\right)$$
+### Operational
 
-- **Additive** over species (outer sum); field = one pass, no per-species surfaces.
-- **Weight** $w_j=(\varphi_j/n_j)^{\text{damp}}$: inverse frequency, $\varphi_j$ = proportion of species' p95 bbox inside domain. $\varphi\le1\le n \Rightarrow w\in(0,1]edup to one point, max weight ($w=1$), excluded from frequency counts.
-- **Rescale** to $[0,1]$ by the 0.95 quantile (not max — one hotspot would own the scale). Into the index as **sparsity** $1-S$ (high = unsurveyed).
+Models which suitable patches are most accessible for survey work. 
 
-Implemented: `lsed::survey_surface()`.
+**A — accessibility.** Travel time to patch from an origin (e.g. field office) over a road, trail, and eventually raster surface (off-trail) graph. 
+Off-trail speed is Tobler speed $v = 6\,e^{-3.5\,|s+0.05|}$ (times an off-trail penalty). 
 
-### Operational Terms:
+> *How accessible is each patch.*
 
-**A**: Accessibility, ability to acess patch
+$$A(x) = 1 - \tilde t(x), \qquad t(x) = \min_{\text{origin}}\big[\, t_{\text{road}} + t_{\text{trail}} + t_{\text{hop}} \,\big]$$
 
-"For planning purposes, how accessible is each patch."
+**C — complementarity.** An isolation penalty, scored by *area* to be resilient to small patch fragments. 
+Walk outward over the network, cheapest patch to visit first, accumulating neighbouring patch acreage $a_j$ until a day's worth of survey work (default) $A^{*}\!\approx 50$ ac is gathered. 
 
-Roads, Hiking Trails, Tobler surface off of them. 
+> *How many other patches would be visited on the same trip.*
 
-**C**: Complementary, how many other patches are accessed on the same route as this one. 
+$$C(x) = 1 - \tilde r(x), \qquad r(x) = \min\Big\{\, d : \textstyle\sum_{\,\mathrm{cost}\le d} a_j \ge A^{*} \,\Big\}$$
 
-1 - C
+---
 
-"For planning, how many other patches would be visited on the same trip"
+Implemented in `lsed`: `survey_surface()` (S); `geo_distance()`, `build_resistance()` + `cost_distance()` (Dg, Dr); `accessibility()`, `complementarity()` (A, C).
