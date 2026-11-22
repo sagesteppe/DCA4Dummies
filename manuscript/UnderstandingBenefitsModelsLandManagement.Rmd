@@ -430,9 +430,23 @@ Hence, models with fewer covariates, are able to retain larger AOAs.
 
 ![Restricting the decision curve to the area of applicability (in-domain, blue) strips away the easy absences that inflate the whole-test estimate (naive, orange). The in-domain model still adds net benefit at the low, broad-survey thresholds relevant to a rare-species search, but less than the naive curve implies. Both curves recalculated at 5% prevalence](../figures/dca_aoa_inflation.png){#fig-aoa}
 
-### Combining Expert Opinions and the model 
+### Combining Expert Opinions and the model
 
-expert interpretation of top sites to visit and 
+DCA shows reasonable expectations when applying a model in a particular problem. 
+However, it provides no strategy for implementation of the procedure itself. 
+To assist practicioners in dealing with the volume of patches, a simple ranking metric is defined
+
+$$\text{Rank}(x) = D_g + D_r + S + A + C$$
+
+Where $Dg$ Geographic distance from a known population, 
+$Dr$ Resistance distance from a known population $R$
+$S$ is historic survey intensity
+$A$ is accessibility to the patch
+and $C$ is the complementarity of the patch, i.e. how many more patches can be surveyed alongside it. 
+The formulations of each are detailed in Appendix 7. 
+
+While we are of the opinion that expert opinion is the only suitable source for determining how distribute resources, e.g. field crews, to locations, this evidence-backed heuristic allows a formal documentation and weighing of many considerations. 
+Minimising the time a decision maker requires to evaluate how they partition their resources. 
 
 ## A posteriori - how well did the model hold up? 
 
@@ -478,13 +492,15 @@ All analysis code, and occurrence data for this manuscript are available on GitH
 The individual model objects used in this manuscript are available on Zenodo at [URL].
 Data from the referred manuscript are available at [], and []. 
 
-### Appendix
+### Appendices
 
 1) Comparision of DCA Curves from Reported Scalars and Test Data
 2) Correcting for the Models Area of Applicability
 3) Decision Curves are Resilient to mis-Estimations of Landscape Prevalence
 4) Areas of Applicability Shrink as Function of the Number of Covariates in a Model
 5) Calculating a Default Plausibility Band for Repeated SDM's
+6) Watersheds of Habitat for Patch Creation
+7) Priority Ranking of Patches
 
 ## article types notes below
 
