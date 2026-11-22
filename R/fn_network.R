@@ -212,6 +212,62 @@ accessibility <- function(lines, patches, dem = NULL, origins = NULL, k = 3,
 }
 
 # ---------------------------------------------------------------------------
+# Complementarity (C)
+# ---------------------------------------------------------------------------
+
+#' Complementarity of patches: can a day's work be assembled nearby? (C)
+#'
+#' An isolation penalty, scaled by \strong{area} rather than count so a knot of
+#' fragments does not out-rank a real patch. For each patch, walk outward over the
+#' network (cheapest travel first) accumulating neighbouring patch \emph{acreage} until
+#' a \code{target_area} day's worth is gathered; the travel cost that bundle required
+#' is the isolation measure. A dense cluster assembles the target cheaply; a lone
+#' fragment must range far (or cannot gather it at all). The score is flipped so
+#' well-connected patches are high and isolated ones are penalised — no day-length
+#' assumption, just the area target.
+#'
+#' Run on the augmented graph returned by \code{\link{accessibility}} (patches are
+#' already nodes there). Distances are computed one source at a time, so memory stays
+#' O(n) for large patch sets.
+#'
+#' @param net the \code{net} element from \code{\link{accessibility}} (its \code{graph}
+#'   holds the patch nodes).
+#' @param patch_nodes the \code{patch_nodes} from \code{\link{accessibility}}, aligned
+#'   to \code{areas}.
+#' @param areas numeric patch areas (acres), one per \code{patch_nodes} in order.
+#' @param target_area a day's worth of patch area to assemble, in acres (default
+#'   \code{50}; loose — the saturation scale, not a hard quota).
+#' @param invert if \code{TRUE} (default), return the flipped score \eqn{1 - \tilde c}
+#'   (well-connected = high), the index form; raw assembly cost is kept in
+#'   \code{assemble_hr}.
+#' @return a data.frame with \code{patch_node}, \code{assemble_hr} (travel hours to
+#'   gather \code{target_area}; \code{Inf} if the reachable patches never total it) and
+#'   \code{C} on \eqn{[0, 1]}, in \code{patch_nodes} order.
+#' @seealso \code{\link{accessibility}}
+#' @export
+complementarity <- function(net, patch_nodes, areas, target_area = 50,
+                            invert = TRUE) {
+  stopifnot(requireNamespace("igraph", quietly = TRUE),
+            length(areas) == length(patch_nodes))
+  g <- net$graph
+  w <- igraph::E(g)$weight
+  n <- length(patch_nodes)
+  cost <- numeric(n)
+  for (i in seq_len(n)) {
+    d <- as.vector(igraph::distances(g, v = patch_nodes[i], to = patch_nodes,
+                                     weights = w))
+    ord <- order(d)                       # self first (cost 0), then nearest
+    hit <- which(cumsum(areas[ord]) >= target_area)[1]
+    cost[i] <- if (is.na(hit)) Inf else d[ord[hit]]   # reach to assemble the day
+  }
+  fin <- is.finite(cost)                  # unreachable-enough -> worst (most isolated)
+  cost[!fin] <- if (any(fin)) max(cost[fin]) else 1
+
+  data.frame(patch_node = patch_nodes, assemble_hr = cost,
+             C = .rescale01_vec(cost, invert), stringsAsFactors = FALSE)
+}
+
+# ---------------------------------------------------------------------------
 # internal
 # ---------------------------------------------------------------------------
 
