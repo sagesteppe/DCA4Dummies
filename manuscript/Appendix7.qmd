@@ -5,7 +5,17 @@ format: html
 
 Each term is rescaled to $[0,1]$ and oriented so **higher = higher survey priority**; the index is their (optionally weighted) sum. $\widetilde{\,\cdot\,}$ denotes a min–max rescale.
 
-$$\text{Rank}(x) = D_g + D_r + S + A + C$$
+$$\text{Rank}(x) = P + D_g + D_r + S + A + C$$
+
+### Model suitability
+
+Models how likely a patch is to be real habitat, from the SDM itself.
+
+**P — predicted suitability.** The patch's mean modelled suitability (`prob_mean`), rescaled.
+
+> *More suitable patches are more likely to hold the taxon.*
+
+$$P(x) = \widetilde{\,\mathrm{prob\_mean}(x)\,}$$
 
 ### Dispersal
 

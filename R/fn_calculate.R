@@ -28,9 +28,21 @@
 #'   (default \code{10}); the ranking is sampled at centroids, so fine resolution is
 #'   wasted here.
 #' @param area_col patch-area column (acres) used by \strong{C} (default \code{"acres"}).
-#' @param sigma,target_area,k,w_habitat term parameters passed through to
+#' @param prob_col patch column holding the model suitability to enter as a term
+#'   \code{P} (default \code{"prob_mean"}); a more-suitable patch is likelier real
+#'   habitat. \code{NULL} omits it.
+#' @param sigma,target_area,k,w_habitat,speeds term parameters passed through to
 #'   \code{\link{survey_surface}} / \code{\link{complementarity}} /
 #'   \code{\link{accessibility}} / \code{\link{build_resistance}}.
+#' @param cluster_eps_km if set, compute \strong{A}/\strong{C} per spatial cluster
+#'   (bbox) rather than on one domain-wide graph: patches within this distance (km)
+#'   share a cluster (\code{\link{cluster_patches}}), and each cluster is routed on its
+#'   own small graph — all roads (for the drive-in) plus only that cluster's trails.
+#'   \code{NULL} (default) uses a single graph. The per-cluster split is a big win when
+#'   patches are scattered; raw travel times are rescaled once, globally, so clusters
+#'   stay comparable. Cross-cluster co-visitation is negligible at this separation.
+#' @param cluster_buffer_m buffer (m) around each cluster's bbox when selecting its
+#'   local trails (default \code{1500}).
 #' @param weights per-term multipliers for \code{\link{rank_index}} (default equal).
 #' @return \code{patches} with the rescaled term columns, \code{index} and \code{rank}
 #'   appended (an \pkg{sf}).
@@ -39,7 +51,9 @@
 rank_calculate <- function(patches, occ, suitability, records = NULL,
                            network = NULL, origin = NULL, dem = NULL,
                            resistance = NULL, agg = 10, area_col = "acres",
-                           sigma = 100, target_area = 50, k = 3, w_habitat = 5,
+                           prob_col = "prob_mean", sigma = 100, target_area = 50,
+                           k = 3, w_habitat = 5, cores = 1, speeds = osm_speeds,
+                           cluster_eps_km = NULL, cluster_buffer_m = 1500,
                            weights = NULL) {
   patches <- sf::st_as_sf(patches)
   suit <- if (inherits(suitability, "SpatRaster")) suitability
@@ -73,13 +87,41 @@ rank_calculate <- function(patches, occ, suitability, records = NULL,
   }
 
   # A, C — accessibility and complementarity over the network (if supplied).
+  # Processed per spatial cluster (bbox) when cluster_eps_km is set: each cluster gets
+  # its own small graph (all roads for the drive-in + only that bbox's trails), so the
+  # work scales with cluster size, not the whole domain. Raw hours are collected and
+  # rescaled once, globally (by rank_index), so bboxes stay comparable.
   if (!is.null(network) && !is.null(origin)) {
-    acc <- accessibility(network, patches, origins = origin, dem = dem, k = k)
-    terms$A <- acc$patches$A
-    terms$C <- complementarity(acc$net, acc$patch_nodes,
-                               areas = patches[[area_col]],
-                               target_area = target_area)$C
+    n <- nrow(patches)
+    acc_hr <- rep(NA_real_, n); asm_hr <- rep(NA_real_, n)
+    run_block <- function(idx, net_b) {
+      ab <- accessibility(net_b, patches[idx, ], origins = origin, dem = dem,
+                          k = k, speeds = speeds)
+      acc_hr[idx] <<- ab$patches$access_hr
+      asm_hr[idx] <<- complementarity(ab$net, ab$patch_nodes,
+                                      areas = patches[[area_col]][idx],
+                                      target_area = target_area, cores = cores)$assemble_hr
+    }
+    if (is.null(cluster_eps_km)) {
+      run_block(seq_len(n), network)
+    } else {
+      cl <- cluster_patches(patches, eps_km = cluster_eps_km)$cluster
+      roads  <- network[!is.na(network$class) & network$class == "road", ]
+      trails <- network[!is.na(network$class) & network$class == "trail", ]
+      for (gid in unique(cl)) {
+        idx <- which(cl == gid)
+        bb  <- sf::st_buffer(sf::st_as_sfc(sf::st_bbox(patches[idx, ])), cluster_buffer_m)
+        tl  <- trails[lengths(sf::st_intersects(trails, bb)) > 0, ]
+        run_block(idx, rbind(roads, tl))        # all roads (drive-in) + local trails
+      }
+    }
+    terms$A <- -acc_hr                           # rank_index rescales: low hr -> high
+    terms$C <- -asm_hr
   }
+
+  # P — model suitability of the patch itself (likelier real habitat).
+  if (!is.null(prob_col) && prob_col %in% names(patches))
+    terms$P <- patches[[prob_col]]
 
   scored <- do.call(rank_index, c(terms, list(weights = weights)))
   sf::st_sf(data.frame(sf::st_drop_geometry(patches), scored,

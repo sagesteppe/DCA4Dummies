@@ -249,6 +249,9 @@ osm_access <- function(bbox, crs = NULL,
 #'   30 km of envelope width).
 #' @param local_tile_km target tile width (km) for each cluster's dense pull, so a big
 #'   habitat block is not one enormous Overpass query (default \code{20}).
+#' @param contract simplify the merged network to junction-to-junction edges before
+#'   writing (default \code{TRUE}; \code{\link{contract_network}}) — the on-disk file is
+#'   then the contracted version, ~30x fewer graph nodes.
 #' @param ... passed to \code{\link{osm_access}} (e.g. \code{endpoint}, \code{contact},
 #'   \code{pause}).
 #' @return a list: \code{network} (merged \pkg{sf} lines, deduped), \code{origin}
@@ -265,7 +268,7 @@ osm_network_for <- function(patches, origin, crs = NULL, eps_km = 5, buffer_m = 
                             connect_roads = c("motorway", "trunk", "primary",
                                               "secondary", "tertiary"),
                             path = NULL, cache_dir = NULL, tiles_connect = NULL,
-                            local_tile_km = 20, ...) {
+                            local_tile_km = 20, contract = TRUE, ...) {
   pcrs <- if (!is.null(crs)) sf::st_crs(crs) else sf::st_crs(patches)
   patches <- sf::st_transform(patches, pcrs)
   org <- if (inherits(origin, c("sf", "sfc", "SpatVector")))
@@ -309,8 +312,10 @@ osm_network_for <- function(patches, origin, crs = NULL, eps_km = 5, buffer_m = 
 
   net <- do.call(rbind, c(locals, list(conn)))
   net <- net[!duplicated(net$osm_id), , drop = FALSE]
+  if (contract && nrow(net))               # simplify to junction-to-junction edges
+    net <- contract_network(net)
   sf::st_write(net, path, quiet = TRUE, delete_dsn = TRUE)
-  message(sprintf("osm_network_for: %d ways, %d clusters -> %s",
-                  nrow(net), length(boxes), path))
+  message(sprintf("osm_network_for: %d %sways, %d clusters -> %s",
+                  nrow(net), if (contract) "contracted " else "", length(boxes), path))
   structure(list(network = net, origin = org, clusters = cc), path = path)
 }
