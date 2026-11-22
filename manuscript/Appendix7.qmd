@@ -26,10 +26,16 @@ Continuous Gaussian field from target-group records (GBIF pull), **not** a binne
 
 $$S(x)=\sum_j w_j \sum_{i\in j}\exp\!\left(-\frac{\lVert x-p_{ij}\rVert^2}{2\sigma^2}\right)$$
 
+- **Additive** over species (outer sum); field = one pass, no per-species surfaces.\rVert^2}{2\sigma^2}\right)$$
+
 - **Additive** over species (outer sum); field = one pass, no per-species surfaces.
+- **Weight** $w_j=(\varphi_j/n_j)^{\text{damp}}$: inverse frequency, $\varphi_j$ = proportion of species' p95 bbox inside domain. $\varphi\le1\le n \Rightarrow w\in(0,1]
 - **Weight** $w_j=(\varphi_j/n_j)^{\text{damp}}$: inverse frequency, $\varphi_j$ = proportion of species' p95 bbox inside domain. $\varphi\le1\le n \Rightarrow w\in(0,1]$, no cap needed.
 - **Floor**: drop species with < 5 records. **$\sigma$ = 100 m**, kernel truncated at $4\sigma$.
-- **Plots** (FIA/AIM/VegBank — complete inventories): dedup to one point, max weight ($w=1$), excluded from frequency counts.
+- **Plots** (FIA/AIM/VegBank — complete inventories): d\rVert^2}{2\sigma^2}\right)$$
+
+- **Additive** over species (outer sum); field = one pass, no per-species surfaces.
+- **Weight** $w_j=(\varphi_j/n_j)^{\text{damp}}$: inverse frequency, $\varphi_j$ = proportion of species' p95 bbox inside domain. $\varphi\le1\le n \Rightarrow w\in(0,1]edup to one point, max weight ($w=1$), excluded from frequency counts.
 - **Rescale** to $[0,1]$ by the 0.95 quantile (not max — one hotspot would own the scale). Into the index as **sparsity** $1-S$ (high = unsurveyed).
 
 Implemented: `lsed::survey_surface()`.

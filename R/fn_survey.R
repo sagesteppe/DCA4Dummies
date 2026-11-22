@@ -102,6 +102,7 @@ survey_surface <- function(coords, species, template = NULL, res = NULL,
   if (is.null(domain) &&
       (inherits(template, "SpatRaster") || inherits(template, "SpatExtent")))
     domain <- terra::ext(template)
+    
   if (is.null(record_type) && !is.null(origin))
     record_type <- guess_record_type(origin, plot_label = plot_types[1])
   fld <- survey_field(coords, species, sigma = sigma, record_type = record_type,
