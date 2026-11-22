@@ -8,3 +8,7 @@ literature/
 raster/
 gbif_download/
 gbif_tracheophyta_1990.gpkg
+osm_net_cache/
+osm_network.gpkg
+patch_rankindex.gpkg
+

@@ -182,7 +182,7 @@ osm_access <- function(bbox, crs = NULL,
   stamp <- attr(tiles_sf[[1]], "timestamp")
   allw <- do.call(rbind, tiles_sf)
   allw <- allw[!duplicated(allw$osm_id), ]          # tile seams share boundary ways
-  if (nrow(allw) && out_crs != sf::st_crs(4326)) allw <- sf::st_transform(allw, out_crs)
+  if (out_crs != sf::st_crs(4326)) allw <- sf::st_transform(allw, out_crs)  # also sets CRS when empty
   if (!nrow(allw)) warning("no highways returned for this bbox")
 
   sf::st_write(allw, path, quiet = TRUE, delete_dsn = TRUE)
@@ -247,6 +247,8 @@ osm_access <- function(bbox, crs = NULL,
 #'   \code{path}); existing pulls are reused, so the whole fetch is resumable.
 #' @param tiles_connect tiles for the connective roads pull (\code{NULL} -> ~1 per
 #'   30 km of envelope width).
+#' @param local_tile_km target tile width (km) for each cluster's dense pull, so a big
+#'   habitat block is not one enormous Overpass query (default \code{20}).
 #' @param ... passed to \code{\link{osm_access}} (e.g. \code{endpoint}, \code{contact},
 #'   \code{pause}).
 #' @return a list: \code{network} (merged \pkg{sf} lines, deduped), \code{origin}
@@ -262,7 +264,8 @@ osm_network_for <- function(patches, origin, crs = NULL, eps_km = 5, buffer_m = 
                                        "steps"),
                             connect_roads = c("motorway", "trunk", "primary",
                                               "secondary", "tertiary"),
-                            path = NULL, cache_dir = NULL, tiles_connect = NULL, ...) {
+                            path = NULL, cache_dir = NULL, tiles_connect = NULL,
+                            local_tile_km = 20, ...) {
   pcrs <- if (!is.null(crs)) sf::st_crs(crs) else sf::st_crs(patches)
   patches <- sf::st_transform(patches, pcrs)
   org <- if (inherits(origin, c("sf", "sfc", "SpatVector")))
@@ -281,11 +284,15 @@ osm_network_for <- function(patches, origin, crs = NULL, eps_km = 5, buffer_m = 
                            paste0(tools::file_path_sans_ext(basename(path)), "_cache"))
   dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
-  # local dense pulls (roads + trails) per cluster box
-  locals <- lapply(seq_along(boxes), function(i)
-    osm_access(boxes[[i]], crs = pcrs, roads = roads, trails = trails,
+  # local dense pulls (roads + trails) per cluster box; tile big boxes (~1 per
+  # local_tile_km) so no single Overpass query is enormous.
+  locals <- lapply(seq_along(boxes), function(i) {
+    bw <- as.numeric(diff(sf::st_bbox(boxes[[i]])[c("xmin", "xmax")])) / 1000
+    tl <- max(1L, as.integer(ceiling(bw / local_tile_km)))
+    osm_access(boxes[[i]], crs = pcrs, roads = roads, trails = trails, tiles = tl,
                path = file.path(cache_dir, sprintf("cluster_%03d.gpkg", i)),
-               cache_dir = file.path(cache_dir, sprintf("cluster_%03d_tiles", i)), ...))
+               cache_dir = file.path(cache_dir, sprintf("cluster_%03d_tiles", i)), ...)
+  })
 
   # connective roads-only pull over the {origin + clusters} envelope
   env <- sf::st_as_sfc(sf::st_bbox(do.call(c, c(list(sf::st_geometry(org)),
