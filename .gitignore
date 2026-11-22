@@ -6,3 +6,5 @@ citations/
 .quarto
 literature/
 raster/
+gbif_download/
+gbif_tracheophyta_1990.gpkg
