@@ -1,0 +1,39 @@
+---
+title: "Priority Ranking of Patches"
+format: html
+---
+
+RankIndex = Dg + Dr + S + A + C
+
+
+### Dispersal Terms: 
+
+**Dg**: Geographic distance from a known population
+
+"Patches with shorter distances are more likely to be occupied"
+
+**Dr**: Resistance distance from a known population
+
+"Patches with lower values, and less geographic distance, are more likely to be occupied"
+
+### Historic Survey Effort Term: 
+
+**S**: Survey Intensity (i.e. bias surface)
+
+"Well surveyed patches are less likely to be occupied, but undocumented as having the population"
+
+Inverse weight species by frequency of occurrence across the domain, corrected for proportion of p95 bounding box within domain. Rescale - summation of gaussian fields. 
+
+### Operational Terms:
+
+**A**: Accessibility, ability to acess patch
+
+"For planning purposes, how accessible is each patch."
+
+Roads, Hiking Trails, Tobler surface off of them. 
+
+**C**: Complementary, how many other patches are accessed on the same route as this one. 
+
+1 - C
+
+"For planning, how many other patches would be visited on the same trip"
