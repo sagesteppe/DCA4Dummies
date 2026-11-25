@@ -1,0 +1,65 @@
+<!-- Shared calibration-bias analysis, owned by Analyses.qmd and {{< include >}}'d into the main
+     text ("A perfect model?") so the figure and its cox statistics live in one place. The including
+     document's setup chunk must already define HERE and load the fn_*.R helpers (nb_exact,
+     nb_treat_all, cox_calibration), data.table and ggplot2. It leaves behind `p_cal` (the plot) and
+     writes data/calibration_bias_summary.csv (pooled / in-AOA / out-AOA cox intercept & slope). -->
+
+```{r calibration-bias}
+#| include: false
+## Calibration is a WITHIN-AOA property. The pooled cox fit on this model looks almost perfect
+## (intercept ~0.13, slope ~1.02), but it is dominated by the many far-extrapolation points; within
+## the AOA the model is mildly over-extreme (slope < 1). We draw the raw-vs-recalibrated decision
+## curve on the IN-AOA (in-domain) points only -- out-of-AOA there are too few presences (a handful)
+## to estimate calibration or a stable curve, so it is deliberately omitted. Net benefit is
+## rank-blind-proof: raw and recalibrated share every AUC, yet their curves can differ because p_t and
+## p-hat share a scale. Reweighted to the same prevalence as the AOA figure.
+EX <- "1arc-Iteration1-PA1:30DO:0-Seed5101"
+PI <- 0.05
+
+p <- fread(file.path(HERE, "data", "holdout_point_predictions.csv"))[model == EX & design == "spatial_mapping"]
+a <- fread(file.path(HERE, "data", "holdout_point_aoa.csv"))
+m <- merge(p, a[, .(model, point_id, DI, DI_thresh)], by = c("model", "point_id"))
+m[, extrap := DI > DI_thresh]
+ind <- m[extrap == FALSE]                        # in-AOA (in-domain) points only
+
+pt <- seq(0.001, 0.25, by = 0.002)
+
+## cox fit (on the RAW predictions) -- pooled vs in-AOA -- the one-number summary of the bias.
+cox_of <- function(d) { cc <- cox_calibration(d$Presence, d$prob); c(intercept = cc[["cox_intercept"]], slope = cc[["cox_slope"]]) }
+cox_pool <- cox_of(p[calibration == "raw"])
+cox_in   <- cox_of(ind[calibration == "raw"])
+
+raw <- ind[calibration == "raw"]; cal <- ind[calibration == "calibrated"]
+curves <- rbind(
+  data.table(pt = pt, nb = nb_exact(raw$Presence, raw$prob, PI, pt), strategy = "SDM — raw (as output)"),
+  data.table(pt = pt, nb = nb_exact(cal$Presence, cal$prob, PI, pt), strategy = "SDM — recalibrated"),
+  data.table(pt = pt, nb = nb_treat_all(PI, pt),                     strategy = "Survey all (treat-all)"),
+  data.table(pt = pt, nb = 0,                                        strategy = "Survey none (treat-none)"))
+lv <- c("SDM — raw (as output)", "SDM — recalibrated", "Survey all (treat-all)", "Survey none (treat-none)")
+curves[, strategy := factor(strategy, levels = lv)]
+is_ref <- grepl("treat", curves$strategy)
+
+p_cal <- ggplot(mapping = aes(pt, nb, colour = strategy)) +
+  geom_line(data = curves[is_ref],  aes(linetype = strategy), linewidth = 1.0) +
+  geom_line(data = curves[!is_ref], linewidth = 0.9) +
+  annotate("text", x = 0.005, y = PI * 1.05, hjust = 0, vjust = 1, size = 3, colour = "grey25",
+           label = sprintf("in-AOA cox intercept %.2f\nin-AOA cox slope %.2f", cox_in[["intercept"]], cox_in[["slope"]])) +
+  scale_colour_manual(values = c("SDM — raw (as output)" = cda_cols[["summary"]], "SDM — recalibrated" = cda_cols[["naive"]],
+                                 "Survey all (treat-all)" = cda_cols[["treat_all"]], "Survey none (treat-none)" = cda_cols[["treat_none"]]), name = NULL) +
+  scale_linetype_reference() +
+  scale_x_continuous(labels = scales::percent) +
+  coord_cartesian(ylim = c(-0.03, PI * 1.08)) +
+  labs(x = expression("Threshold probability  " * p[t]), y = "Net benefit",
+       title = sprintf("Calibration within the AOA: raw vs recalibrated (prevalence %.1f%%)", 100 * PI),
+       subtitle = sprintf("Pooled the model looks calibrated (slope %.2f); in-domain it is over-extreme (slope %.2f).",
+                          cox_pool[["slope"]], cox_in[["slope"]])) +
+  theme_cda()
+ggsave(file.path(HERE, "figures", "dca_calibration.png"), p_cal, width = 9, height = 5, dpi = 150)
+
+## stash the cox summary so the main .Rmd (knitr, no shared env) can read it like patch_summary.
+out <- data.table(
+  prevalence     = PI,
+  cox_int_pool   = cox_pool[["intercept"]], cox_slope_pool = cox_pool[["slope"]],
+  cox_int_in     = cox_in[["intercept"]],   cox_slope_in   = cox_in[["slope"]])
+fwrite(out, file.path(HERE, "data", "calibration_bias_summary.csv"))
+```

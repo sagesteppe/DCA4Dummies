@@ -98,6 +98,12 @@ suitable absences. (The ROC-AUC drop across all models is quantified in Appendix
 
 {{< include _aoa_downgrade.qmd >}}
 
+<!-- Calibration bias: raw vs recalibrated per-point DCA on the same example model. Builds
+     figures/dca_calibration.png and data/calibration_bias_summary.csv (cox intercept/slope),
+     consumed by the main text's "A perfect model?" section. -->
+
+{{< include _calibration_bias.qmd >}}
+
 ```{r}
 #| label: fig-aoa-inflation
 #| fig-cap: "Naive (full hold-out) vs AOA-honest (in-domain) decision curve for the example model, both at 5% prevalence. The two agree only at the broadest thresholds; the gap is the inflation contributed by easy absences, and the in-domain curve drops below \"survey none\" well before the \"survey five to find one\" tolerance."

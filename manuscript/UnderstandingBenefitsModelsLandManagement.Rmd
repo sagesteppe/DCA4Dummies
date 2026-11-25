@@ -397,9 +397,41 @@ Hence, models with fewer covariates, are able to retain larger AOAs.
 
 ![Restricting the decision curve to the area of applicability (in-domain, blue) strips away the easy absences that inflate the whole-test estimate (naive, orange). The in-domain model still adds net benefit at the low, broad-survey thresholds relevant to a rare-species search, but less than the naive curve implies. Both curves recalculated at 5% prevalence](../figures/dca_aoa_inflation.png){#fig-aoa}
 
-### A perfect model? 
+### A perfect model?
 
-Discuss biases effects on the model here // bias introduced here
+```{r calibration-bias-summary}
+# The raw-vs-recalibrated DCA (figures/dca_calibration.png, in-AOA) and its cox summary are built
+# in Analyses.qmd via _calibration_bias.qmd (costly join + package helpers); here we read the
+# one-row summary, as with patch_summary below.
+cal_summary    <- read.csv(file.path('..', 'data', 'calibration_bias_summary.csv'))
+cox_int_pool   <- cal_summary$cox_int_pool;   cox_slope_pool <- cal_summary$cox_slope_pool
+cox_int_in     <- cal_summary$cox_int_in;     cox_slope_in   <- cal_summary$cox_slope_in
+```
+
+The naive and AOA-corrected curves both assume the model is perfectly calibrated — that a predicted suitability of 0.3 corresponds to a one-in-three chance of occupancy.
+Two distinct failures of that assumption behave very differently in a decision curve, and it is worth separating them.
+
+The first is *calibration bias*: the model systematically over- or under-states probability (a Cox calibration intercept away from zero, or slope away from one).
+A decision curve registers this directly, because the threshold $p_t$ and the predicted probability share a scale — rescaling the predictions slides sites across every threshold and moves the curve.
+This is precisely the information that rank-based metrics discard: PR-AUC and ROC-AUC are invariant to any monotone transformation of the predictions, so two models with identical discrimination but different calibration are indistinguishable by AUC yet separable by net benefit.
+
+Critically, calibration is a property of the area of applicability, not of the whole landscape.
+Pooled across the full hold-out our example model appears almost perfectly calibrated (slope `r sprintf("%.2f", cox_slope_pool)`), but that fit is dominated by the many far-extrapolation absences; restricted to the AOA — where the decision is actually made — the same model is over-extreme (slope `r sprintf("%.2f", cox_slope_in)`).
+Calibration should therefore be assessed, and any recalibration applied, within the AOA.
+Out of the AOA it cannot be assessed at all here: too few presences survive to estimate either a calibration slope or a stable curve.
+The direction of the effect matters for interpretation — overprediction erodes net benefit most at high thresholds, underprediction most at low thresholds [@vancalster2015calibration].
+This is a separate quantity from the summary-versus-per-point discrepancy of Appendix 1, which the calibration intercept does not drive; here calibration shifts the level of the curve itself rather than the gap between estimation routes.
+
+<!-- TODO (second failure mode — spatial mis-prediction — draft still pending):
+     The pooled DCA is blind to WHERE errors fall. Net benefit is a pooled count of true/false
+     positives, so two models with identical confusion matrices at every p_t have identical curves
+     no matter how their errors are arranged in space; no reformulation of the aggregated curve
+     recovers it. Detecting it needs residual autocorrelation (Moran's I / a correlogram across the
+     domain), not the DCA. The payoff is the bridge to the next section: when residuals cluster,
+     pixels stop being independent (assumption #3) and a patch is right or wrong as a unit — the
+     motivation for the Patch Formulation. Keep short; do not force it into the DCA. -->
+
+![Calibration is a within-AOA property. Raw SDM output (gold) and recalibrated probabilities (green) rank sites identically — so they share every AUC — yet their net benefit can differ, because the threshold $p_t$ and the predicted probability live on the same scale. Pooled across the whole hold-out the model looks well calibrated (Cox intercept `r sprintf("%.2f", cox_int_pool)`, slope `r sprintf("%.2f", cox_slope_pool)`), but that fit is dominated by the many far-extrapolation points; restricted to the area of applicability — where the decision is actually made — the model is over-extreme (slope `r sprintf("%.2f", cox_slope_in)`). Calibration should therefore be assessed, and the recalibration applied, inside the AOA. Out-of-AOA points are omitted: too few presences to estimate calibration or a stable curve. Curves at 5% prevalence.](../figures/dca_calibration.png){#fig-calibration}
 
 
 ### Patch Formulation 
