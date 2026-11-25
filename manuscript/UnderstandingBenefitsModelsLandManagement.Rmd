@@ -201,7 +201,7 @@ ggplot(nb, aes(threshold, net_benefit, colour = strategy)) +
     )
 ```
 
-Decision curve analysis is considered visually on a plot with two axis. 
+Decision curve analysis is evaluated visually on a plot with two axis. 
 The Y axis is the **net benefit** of acting on the decision, and is derived from the following three components, and discussed at the end of this paragraph.  
 1) The X axis is the **theshold probability** ($p_t$), a metric each user will define based on their objectives. 
 For example, if you were satisfied to find one new rare plant population per ten sites surveyed ($*1/10)*100$), $p_t$ is = 10%. 
@@ -228,8 +228,8 @@ For a land management application, the population is the area managed by a pract
 However, there must be discrete units to treat, such as: allotments (or geographic units within allotments), populations of a species, stream reaches, or forests etc. 
 For the application of species distribution models to detect new species, the unit of analysis must be defined as patches of suitable habitat; which tend to only exist with high resolution models; or can be recovered via clustering techniques (which, why?).
 
-WHILE CREATING SDMS we calculate PR-AUC from the ratio of presences to absence points. 
-However, these data are rarely balanced to the scale of the landscape. 
+While modeling a species distribution we calculate PR-AUC from the ratio of presences to absence points. 
+However, these records data are rarely balanced to the scale of the landscape. 
 Indeed it is common practice for certain models to reduce the absences to be roughly 1-10x the number of presences (Elith).
 Hence using a 1:1 ratio of P:A, we are reporting the measures of success for a taxon that would occupy 50% of the lanscape.
 
@@ -372,7 +372,7 @@ WE DID THIS AND SIMILAR TO VICKERS, WHILE USEFUL TO HAVE, IT IS GENERALLY QUITE 
 
 Decision makers without access to the raw point data cannot calculate a formal confidence interval. 
 However, sensitivity analysis offers a stand in WHERE IF YOU DO THIS. 
-However, based on our results, where we repeatedly model species under similar conditions (pseudo-absence universe, Presence absence ratios, covariate selection, and modelling methods), we offer an estimate that PR-AUC halfwidth varies by around 0.04 PR-AUC accuracy, as a starting point suggestion.  
+However, based on our results, where we repeatedly model species under similar conditions (pseudo-absence universe, Presence absence ratios, covariate selection, and modelling methods), we offer an estimate that PR-AUC halfwidth varies by around 0.04 PR-AUC accuracy, as a starting point suggestion (Appendix 5)
 
 #### Naive formulation summary
 

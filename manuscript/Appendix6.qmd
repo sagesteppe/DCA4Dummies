@@ -15,22 +15,15 @@ if (!exists("theme_cda")) theme_cda <- function() theme_minimal(base_size = 12)
 ```
 
 **Situation.** The watershed patch delineation (`Analyses.qmd`) splits a blob of suitable habitat
-wherever two probability *cores* are separated by a sufficiently deep neck. "Sufficiently deep" is
-the single tunable `delta`: the minimum drop in predicted probability between two peaks required to
-keep them as separate patches. Mechanically it is the fill depth on the inverted surface,
-`wbt_fill_depressions(1 - pr, max_depth = delta)`, so **`delta` is in the same units as the
-prediction surface** (probability), and the inversion preserves magnitude — a neck 0.05 deep in
-`1 - pr` is a prominence of 0.05 in `pr`. The question this appendix answers: can a *suitable*
-`delta` be derived from the data, or is it an irreducible policy choice?
+wherever two probability *cores* are separated by a sufficiently deep neck. 
+"Sufficiently deep" is the single tunable `delta`: the minimum drop in predicted probability between two peaks required to keep them as separate patches.
+Mechanically it is the fill depth on the inverted surface, `wbt_fill_depressions(1 - pr, max_depth = delta)`, so **`delta` is in the same units as the prediction surface** (probability), and the inversion preserves magnitude — a neck 0.05 deep in `1 - pr` is a prominence of 0.05 in `pr`. 
+The question this appendix answers: can a *suitable* `delta` be derived from the data, or is it an irreducible policy choice?
 
-**`delta` is a topological persistence threshold.** Each core is "born" at its summit probability
-and "dies" when, as the surface is flooded downward, it spills into a taller neighbour through a
-saddle. Its *persistence* (prominence) is `peak − saddle`. `delta` simply discards every core whose
-persistence falls below it. So the data-driven question is whether the distribution of core
-prominences has a **gap** — a scale separating noise bumps from genuine cores — that would name a
-`delta`. We measure every core's prominence exactly with a union-find superlevel-set filtration
-(8-connected, matching the D8 watershed), pooled over a stratified sample of the multi-peak-capable
-patches.
+**`delta` is a topological persistence threshold.** Each core is "born" at its summit probability and "dies" when, as the surface is flooded downward, it spills into a taller neighbour through a saddle. 
+Its *persistence* (prominence) is `peak − saddle`. `delta` simply discards every core whose persistence falls below it. 
+So the data-driven question is whether the distribution of core prominences has a **gap** — a scale separating noise bumps from genuine cores — that would name a `delta`. 
+We measure every core's prominence exactly with a union-find superlevel-set filtration (8-connected, matching the D8 watershed), pooled over a stratified sample of the multi-peak-capable patches.
 
 ```{r delta-compute}
 #| include: false
@@ -175,12 +168,12 @@ knitr::kable(
   caption = "Peaks recovered per patch at representative delta values.")
 ```
 
-The merge rate falls monotonically as `delta` grows and never flattens into a plateau. If a true
-noise/signal scale existed, flooding would run hot clearing single-pixel noise, stall across an empty
-prominence gap, then resume as it dissolved genuine cores — a dip in the merge rate. There is no
-such dip. The log-prominence spectrum confirms it: a single decaying tail from the 0.002
-quantization floor outward, the only structure being the quantization comb. **The surface has no
-characteristic prominence scale, so `delta` is not a discoverable constant of this prediction.**
+The merge rate falls monotonically as `delta` grows and never flattens into a plateau. 
+If a true noise/signal scale existed, flooding would run hot clearing single-pixel noise, stall across an empty
+prominence gap, then resume as it dissolved genuine cores — a dip in the merge rate. 
+There is no such dip. The log-prominence spectrum confirms it: a single decaying tail from the 0.002
+quantization floor outward, the only structure being the quantization comb.
+**The surface has no characteristic prominence scale, so `delta` is not a discoverable constant of this prediction.**
 
 **Why the resolution is not the culprit.** The filtration recovers ~31 genuine cores per patch at
 infinitesimal prominence, every saddle resolved; nothing is lost to the 9 m grid. The absence of a

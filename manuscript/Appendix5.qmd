@@ -13,16 +13,19 @@ library(lsed)                                                                 # 
 for (f in list.files(file.path(HERE, "R"), "^fn_.*\\.R$", full.names = TRUE)) source(f)  # local figure palette & theme
 ```
 
-**Situation.** The summary route (Appendix 1) reconstructs an entire decision curve from a single reported discrimination metric — a PR-AUC — by anchoring an equal-variance binormal ROC to it.
-But a reported PR-AUC is a point estimate from one train/test partition, and almost no SDM study reports any uncertainty on it.
-The curve inherits that silence: it is drawn as a single confident line.
-Here we ask how wide the decision curve's *plausible* band becomes once we admit that the anchoring metric — and therefore the binormal separation $\mu$ — is itself uncertain, and we calibrate the width of that admission from replicate models rather than assuming it.
+**Situation.** The summary route (Appendix 1) reconstructs an entire decision curve from a single reported discrimination metric by anchoring an equal-variance binormal ROC to it.
+However, a reported PR-AUC is a point estimate from one train/test partition, and few papers report uncertainty on them.
+Here we model how wide the decision curve's *plausible* band becomes once we admit that the anchoring metric, and therefore the binormal separation $\mu$ is uncertain. 
+We then calibrate the width of that finding from replicate models, from previous work, rather than assuming it.
 
-**Experiment.** There is no sampling distribution to read a confidence interval from when all a user holds is a borrowed scalar, so the band must come from a *plausible range* on the metric, propagated through $\mu$.
+**Experiment.** There is no sampling distribution to calculate a confidence interval from when a has only a scalar.  
+Rather than a CI, the uncertainty band must be estimated using a *plausible range* on scalar, propagated through $\mu$.
 We anchor that range on the metric scale, not on $\mu$ directly: a fixed shift in $\mu$ has no stable meaning across taxa or prevalences, whereas a spread in PR-AUC is exactly what replicate partitions exhibit.
-First we **calibrate** the spread: for the running example's resolution and iteration (`1arc`, Iteration 1) every presence:absence ratio from 1:1 to 1:30 was fit under roughly ten replicate seeds — the same configuration, a different train/test partition each time — so the across-seed spread of the reported metric within a fixed ratio is the partition-to-partition variability, measured directly.
+First we **calibrate** the spread: for the running example's resolution and iteration (`1arc`, Iteration 1) every presence:absence ratio from 1:1 to 1:30 was fit under roughly ten replicate seeds under the same configuration.
+But with a different train/test partition each iteration, so the across-seed spread of the reported metric within a fixed ratio is the partition-to-partition variability, measured directly.
 We then **propagate** the pooled spread through `nb_binormal_band()`, which converts the reported PR-AUC and its $\pm$spread endpoints to $\mu$ (by inverting `ap_binormal()` at the evaluation prevalence) and reads each off `nb_binormal()` at the target landscape prevalence (2.5%, as in Appendix 1).
-Finally we **validate** the summary-route band against the model-free per-point bootstrap of `nb_exact_ci()`, computed from the same model's held-out predictions: where raw predictions exist, the bootstrap is the honest sampling band, and agreement is what licenses the cheaper summary route.
+Finally we **validate** the summary-route band against the model-free per-point bootstrap of `nb_exact_ci()`, computed from the same model's held-out predictions. 
+Where raw predictions exist, the bootstrap is the honest sampling band, and agreement with it supports the plausibility band approach.
 
 ```{r calibrate}
 #| include: false
@@ -76,9 +79,11 @@ p_cal <- ggplot(long, aes(pa, sd, colour = metric)) +
 ggsave(file.path(HERE, "figures", "binormal_band_calibration.png"), p_cal, width = 8.5, height = 4.2, dpi = 150)
 ```
 
-**Result.** The partition-to-partition spread is substantial and, on the reported metric, remarkably stable: across the seventeen ratios the across-seed PR-AUC standard deviation sits near `r sprintf("%.1f", pr_sd_pts)` points (pooled default `r sprintf("%.3f", SPREAD)`), with individual swings as large as `r sprintf("%.0f", pr_swing)` points between partitions of the *same* model specification.
-Crucially it barely tracks the P:A ratio (Figure 1, left), which is what makes a single pooled default defensible: a practitioner who borrows one PR-AUC can be handed one plausible spread without knowing the design ratio.
-The ROC-AUC spread behaves oppositely (Figure 1, right), shrinking roughly `r sprintf("%.0f", auc_ratio)`-fold from balanced to rare designs as the hold-out accumulates easy absences and the rank statistic stabilises — so anchoring the band on ROC-AUC would demand a ratio-specific spread, while anchoring on the reported PR-AUC does not.
+**Result.** The partition-to-partition spread is substantial and, on the reported metric, stable. 
+Across the seventeen ratios the across-seed PR-AUC standard deviation sits near `r sprintf("%.1f", pr_sd_pts)` points (pooled default `r sprintf("%.3f", SPREAD)`), with individual swings as large as `r sprintf("%.0f", pr_swing)` points between partitions of the *same* model specification.
+Crucially it barely tracks the P:A ratio (Figure 1, left), which is what makes a single pooled default defensible: a practitioner using a reported PR-AUC can also use a plausible spread without knowing the design ratio.
+The ROC-AUC spread behaves oppositely (Figure 1, right), shrinking roughly `r sprintf("%.0f", auc_ratio)`-fold from balanced to rare designs as the hold-out accumulates easy absences and the rank statistic stabilises . 
+Anchoring the band on ROC-AUC demands a ratio-specific spread, while anchoring on the reported PR-AUC does not.
 
 ```{r}
 #| label: fig-band-calibration
@@ -145,7 +150,8 @@ ggsave(file.path(HERE, "figures", "binormal_band_example.png"), p_band, width = 
 Carried onto the decision curve, that metric uncertainty produces a narrow, decision-stable band.
 For the example model (reported PR-AUC `r sprintf("%.2f", pr)` at its `r sprintf("%.1f%%", 100 * pih)` evaluation prevalence, central $\mu = `r sprintf("%.2f", mu[["central"]])`$), the $\pm`r sprintf("%.3f", SPREAD)`$ PR-AUC spread spans only about `r sprintf("%.1f", sum_w)` points of net benefit at the "survey five to find one" threshold, and its lower edge stays above both the survey-all and survey-none references across the `r if (robust) "entire" else "most of the"` decision-relevant range (Figure 2).
 The recommendation — use the model — survives the admission of metric uncertainty.
-Reassuringly, the summary band brackets the per-point bootstrap of the raw predictions (whose own 80% lower edge sits about `r sprintf("%.1f", ex_w)` points below its curve at the same threshold): the cheap reconstruction and the honest resample agree, which is precisely the condition under which the summary route can be trusted when raw predictions are unavailable.
+Reassuringly, the summary band brackets the per-point bootstrap of the raw predictions (whose own 80% lower edge sits about `r sprintf("%.1f", ex_w)` points below its curve at the same threshold).
+The cheap reconstruction and the honest resample agree, which is why condition under which the summary route can be trusted when raw predictions are unavailable.
 
 ```{r}
 #| label: fig-binormal-band
@@ -155,6 +161,6 @@ p_band
 
 **Conclusion.**
 A decision curve reconstructed from a single reported PR-AUC should not be drawn as a bare line: the metric that anchors it moves by a few points from one train/test partition to the next, and that movement propagates through $\mu$ into the curve.
-Because the PR-AUC spread is near-constant across design ratios, a single pooled default — here the partition-to-partition standard deviation of the reported metric — gives a defensible plausibility band without any raw predictions or model object.
+Because the PR-AUC spread is near-constant across design ratios, a single pooled default, here the partition-to-partition standard deviation of the reported metric, gives a defensible plausibility band without any raw predictions or model object. 
 It is a sensitivity band, not a confidence interval, and it narrows to nothing only if the metric were known exactly; honest practice is to report it.
 Where the band's lower edge stays clear of survey-all and survey-none, as for the example model here, the uncertainty is decision-irrelevant and the summary route can stand in for the per-point bootstrap it is shown to match.
