@@ -1,6 +1,16 @@
 ---
 title: "Appendix 5 — Calculating a Default Plausibility Band for Repeated SDM's"
 date: last-modified
+format:
+  pdf:
+    pdf-engine: xelatex
+    geometry: margin=1in
+    fig-pos: "H"
+    header-includes:
+      - \usepackage{setspace}
+      - \doublespacing
+      - \usepackage{lineno}
+      - \linenumbers
 ---
 
 ```{r setup}

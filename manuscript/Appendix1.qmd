@@ -1,6 +1,16 @@
 ---
 title: "Appendix 1 — Comparision of DCA Curves from Reported Scalars and Test Data"
 date: last-modified
+format:
+  pdf:
+    pdf-engine: xelatex
+    geometry: margin=1in
+    fig-pos: "H"
+    header-includes:
+      - \usepackage{setspace}
+      - \doublespacing
+      - \usepackage{lineno}
+      - \linenumbers
 ---
 
 ```{r setup}

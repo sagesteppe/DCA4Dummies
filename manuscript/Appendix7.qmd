@@ -1,6 +1,16 @@
 ---
-title: "Priority Ranking of Patches"
-format: html
+title: "Appendix 7 — Priority Ranking of Patches"
+date: last-modified
+format:
+  pdf:
+    pdf-engine: xelatex
+    geometry: margin=1in
+    fig-pos: "H"
+    header-includes:
+      - \usepackage{setspace}
+      - \doublespacing
+      - \usepackage{lineno}
+      - \linenumbers
 ---
 
 Each term is rescaled to $[0,1]$ and oriented so **higher = higher survey priority**; the index is their (optionally weighted) sum. $\widetilde{\,\cdot\,}$ denotes a min–max rescale.
