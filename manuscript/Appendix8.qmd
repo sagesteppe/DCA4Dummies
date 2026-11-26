@@ -1,0 +1,120 @@
+---
+title: "Appendix 8 — Spatial Structure in Model Residuals"
+date: last-modified
+format:
+  pdf:
+    pdf-engine: xelatex
+    geometry: margin=1in
+    fig-pos: "H"
+    header-includes:
+      - \usepackage{setspace}
+      - \doublespacing
+      - \usepackage{lineno}
+      - \linenumbers
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align = "center", dpi = 150)
+suppressPackageStartupMessages({library(sf); library(terra); library(gstat); library(ggplot2)})
+HERE <- ".." # this .qmd lives in manuscript/; repo root is ..
+if (requireNamespace("lsed", quietly = TRUE)) library(lsed)
+for (f in list.files(file.path(HERE, "R"), "^fn_.*\\.R$", full.names = TRUE)) source(f)  # palette & theme
+if (!exists("theme_cda")) theme_cda <- function() theme_minimal(base_size = 12)
+```
+
+**Situation.** The decision curves of the main text are pooled over the landscape: net benefit is a sum of true- and false-positive counts, so it is invariant to *where* a model's errors fall.
+Two models with the same confusion matrix at every threshold have identical decision curves even if one scatters its errors at random and the other concentrates them in one drainage.
+A decision curve therefore cannot, by construction, reveal spatially structured mis-prediction.
+Here we give a simple diagnostic for it, and apply it to the example model.
+
+**Experiment.** The model predicts the probability of *suitable habitat*, not occupancy.
+We scored its prediction surface against the reviewed field points — the genuinely labelled presences and absences, not the pseudo-absence candidates that are model inputs — and took, at each point, the signed difference between the observed occurrence and the predicted suitability ($y - \hat p$).
+A positive difference is a site the model *under*-rates (occupied, low predicted suitability); a negative one is a site it *over*-rates.
+We first map these signed differences to see their magnitude and sign directly, then ask whether they are spatially structured by fitting an empirical variogram.
+If residuals are autocorrelated, the structured part can be interpolated — residual (regression) kriging — into a bias-correction surface and used to re-rank or flag management units; if they are not, there is nothing to interpolate and the exercise stops there.
+
+```{r residuals-compute}
+#| include: false
+## reviewed field points with genuine labels (drop NA; cast mixed geometry to points).
+pts <- st_read(file.path(HERE, "data/3m-presence-iter1.gpkg"), quiet = TRUE)
+pts <- pts[!is.na(pts$Presenc), ]
+geo <- st_cast(st_centroid(st_geometry(pts)), "POINT")
+pts <- st_sf(Occurrence = as.integer(pts$Presenc), geometry = geo)
+
+## predicted suitability from the model's surface, then the signed difference.
+r <- rast(file.path(HERE, "data/raster/1-3arc-Iteration1-PA1:35DO:0-Seed5001-Pr.tif"))
+pts$prob <- terra::extract(r, vect(pts))[, 2]
+pts <- pts[is.finite(pts$prob), ]
+pts$diff <- pts$Occurrence - pts$prob
+
+## magnitude summary.
+ad <- abs(pts$diff)
+med_abs <- median(ad); mean_abs <- mean(ad); n_big <- sum(ad > 0.5); tot_var <- var(pts$diff)
+
+## two survey clusters (5 far-eastern singletons excluded from the cropped maps).
+xy <- as.data.frame(st_coordinates(pts)); xy$diff <- pts$diff
+xy$cluster <- ifelse(xy$Y < 4250000, "South", ifelse(xy$X < 360000, "NW", "drop"))
+
+diff_map <- function(grp, m = 800) {
+  d <- subset(xy, cluster == grp); d <- d[order(abs(d$diff)), ]   # large differences on top
+  ggplot(d, aes(X, Y, colour = diff, size = abs(diff))) +
+    geom_point(alpha = 0.85) +
+    scale_colour_gradient2(low = "#2166AC", mid = "grey88", high = "#C0392B", midpoint = 0,
+                           limits = c(-1, 1), name = expression(y - hat(p))) +
+    scale_size_continuous(range = c(0.6, 4), guide = "none") +
+    coord_sf(crs = 32613, datum = 32613,
+             xlim = range(d$X) + c(-m, m), ylim = range(d$Y) + c(-m, m), expand = FALSE) +
+    labs(x = NULL, y = NULL) +
+    theme_cda() + theme(legend.position = "bottom", axis.text = element_text(size = 7),
+                        legend.key.width = unit(1.1, "cm"))
+}
+p_nw <- diff_map("NW"); p_south <- diff_map("South")
+
+## empirical variogram of the signed differences.
+v <- variogram(diff ~ 1, pts, cutoff = 3000, width = 150)
+gamma0 <- v$gamma[1]   # semivariance at the shortest lag
+p_vgm <- ggplot(v, aes(dist, gamma)) +
+  geom_hline(yintercept = tot_var, linetype = "dashed", colour = "grey55") +
+  annotate("text", x = max(v$dist), y = tot_var, label = "total variance", vjust = -0.6,
+           hjust = 1, size = 3, colour = "grey45") +
+  geom_point(aes(size = np), colour = cda_cols[["naive"]]) +
+  scale_size_continuous(range = c(1, 4), guide = "none") +
+  coord_cartesian(ylim = c(0, max(v$gamma) * 1.1)) +
+  labs(x = "Separation distance (m)", y = "Semivariance",
+       title = "Empirical variogram of the signed residuals") +
+  theme_cda()
+```
+
+```{r fig-diff-nw, fig.cap = "North-west survey cluster: signed difference between observed occurrence and predicted suitability at the reviewed field points. Red = under-rated (occupied, low predicted suitability); blue = over-rated; point size scales with magnitude. Most points are pale (small error); large over- and under-predictions are intermixed rather than segregated.", fig.width = 7.5, fig.height = 6.5}
+p_nw
+```
+
+```{r fig-diff-south, fig.cap = "Southern survey cluster: signed difference as in the previous figure, cropped to the southern survey area.", fig.width = 7.5, fig.height = 6}
+p_south
+```
+
+```{r fig-variogram, fig.cap = "Empirical variogram of the signed residuals (point size scales with the number of pairs per lag). Semivariance sits at the total sample variance (dashed) from the shortest lag onward and does not rise with distance: a pure-nugget field with no spatially structured component at the surveyed scale.", fig.width = 7.5, fig.height = 4.5}
+p_vgm
+```
+
+**Result.** The errors are small and, at the surveyed scale, spatially unstructured.
+The typical absolute difference is `r sprintf("%.2f", med_abs)` in probability units (mean `r sprintf("%.2f", mean_abs)`), and only `r n_big` of `r nrow(pts)` points miss by more than 0.5; over- and under-predictions roughly cancel, consistent with the near-calibrated pooled curve of the main text.
+The signed-difference maps show large residuals of both signs sitting side by side rather than forming coherent patches.
+The variogram makes this quantitative: its semivariance equals the total sample variance (`r sprintf("%.3f", tot_var)`) from the shortest lag (`r sprintf("%.3f", gamma0)` at `r round(v$dist[1])` m) onward and never climbs — a pure-nugget field.
+There is therefore no structured residual component to interpolate: residual kriging here would return the global mean everywhere and correct nothing.
+
+We recommend the diagnostic regardless, because the finding is model- and data-specific.
+Where a model's residuals *are* autocorrelated, the signed-difference map and variogram will show it, and residual (regression) kriging can turn that structure into a bias-correction surface or a per-unit flag — a way to recover spatial mis-prediction that a decision curve cannot see.
+We simply did not find such structure in this dataset, which is unsurprising: the full occurrence set for this taxon is difficult to predict, and the residuals here behave as spatial noise.
+
+Two caveats bound the result.
+The predictions are read from the surface the model was trained on, so these are **in-sample** residuals and understate the true error; the proper comparison uses the held-out test partition from the train/test split, to be substituted when that file is recovered (see note below).
+And the field sample is confined to two small survey clusters, so this speaks only to within-cluster scales below about 2 km, not to broad-scale bias or to unsurveyed country — the same coverage limit that defines the area of applicability (Appendix 2).
+
+<!-- TODO (RCB): swap the in-sample predictions for the held-out TEST partition from the
+     train/test split (on disk on the other machine). Re-run residuals-compute against those
+     points; everything downstream (diff maps, variogram, the pure-nugget conclusion) recomputes.
+     If the hold-out residuals DO show structure, add the residual-kriging correction + a
+     bootstrap ensemble for uncertainty on any patch-level re-tag. -->
