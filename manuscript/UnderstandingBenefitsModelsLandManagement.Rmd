@@ -1,9 +1,9 @@
 ---
 title: "Evaluating the Benefit of Models in Land Management Using Decision Curve Analysis"
 author: |
-  Reed Clark Benkendorf$^{1,2}$, Jeremie B. Fant$^{1,2}$, Sophie Taddeo$^{3}$  
-  $^{1}$ Chicago Botanic Garden, Glencoe, Illinois 60022, USA  
-  $^{2}$ Plant Biology and Conservation, Northwestern University, Evanston, Illinois 60208, USA  
+  Reed Clark Benkendorf$^{1,2}$, Jeremie B. Fant$^{2,1}$, Sophie Taddeo$^{3}$  
+  $^{1}$ Plant Biology and Conservation, Northwestern University, Evanston, Illinois 60208, USA  
+  $^{2}$ Chicago Botanic Garden, Glencoe, Illinois 60022, USA  
   $^{3}$ Department of Environmental and Ocean Sciences, University of California San Diego, San Diego, California 92110, USA  
 abstract: |
   \noindent ## 300 words max
@@ -67,17 +67,18 @@ library(sf)
 library(terra)
 ```
 
-# Main 
-
 # Introduction 
 
-Ecological models are being developed at an incredible rate. 
-Unfortunately, the ability of land managers to use models is limited as a function of their resources (e.g. capital) [@taddeo2026species]. 
-Further, the benefit of applying models in decision making can oftentimes be difficult to estimate *a priori*, and a mismatch between the expectations of a model and it's utility can lead to managers being discouraged from continuing to use models dervied from academic research. 
+A great number of ecological models with land management applications are now being developed. 
+However, the ability of land managers to use models for decision making is limited as a function of their resources (i.e. capital) allotable to enacting actions [@taddeo2026species]. 
+Accordingly, a manager weighing allocating resources to difference decisions may be swayed towards actions with higher changesof successs.
+However, the benefit of applying models in decision making can be difficult to estimate *a priori*, and a mismatch between the expectations of a model and it's results observed on the ground can lead to managers being discouraged from continuing to use models generated in academic research, or for particular types of applications. 
+Hence models should accurately convey their expected utility, rather than focusing on their novelty in solving a particular problem - a key trait required for their publication in most journals.  
 
-Here, we show that a framework used in clinical medical settings can help understand under what conditions a model can be helpful, and how they can complement expert judgement. 
-Decision curve analysis (DCA) was developed in the early millenium by Vickers et al. (2006) to help practicing doctors evaluate medical studies in their everyday practice [@vickers2006decision]. 
-This tool offers a lens to contextualise the benefits of using models under certain conditions, for phenomena at different prevalences across the landscape. 
+Here, we show that a framework used in clinical medical settings for decision making can help understand under what conditions a model can be helpful, and how they can complement expert judgement. 
+Decision curve analysis (DCA) developed by Vickers et al. (2006) to help practicing doctors evaluate the benefits of proposed treatements as documented by statistical models medical studies in their clinics [@vickers2006decision]. 
+This framework contextualises the benefits of using models relative to alternative scenarios, for phenomena at different prevalences across a population.
+Here we extend the logic of the population to the landscape.  
 
 # Conceptual Background 
 
@@ -201,41 +202,39 @@ ggplot(nb, aes(threshold, net_benefit, colour = strategy)) +
     )
 ```
 
-Decision curve analysis is evaluated visually on a plot with two axis. 
-The Y axis is the **net benefit** of acting on the decision, and is derived from the following three components, and discussed at the end of this paragraph.  
-1) The X axis is the **theshold probability** ($p_t$), a metric each user will define based on their objectives. 
-For example, if you were satisfied to find one new rare plant population per ten sites surveyed ($*1/10)*100$), $p_t$ is = 10%. 
-2) A DCA plot always contains a line with a fixed intercept, at 0, and slope of 0 (i.e. a horizontal line) '**treat none**'; indicating the decision to take no action. 
-3) A DCA contains a '**treat all**' line with a Y intercept at the prevalence of the phenomenom within the populations, and passing through net benefit at 0, at the threshold probability at the same prevalence, and always with a slope of -1. 
-To the right of the treat all line - and above the treat none line, and to the left of the decision curve is the space representing where a model can improve decisions. 
+Decision curve analysis is performed visually on a plot with two axis. 
+The X axis is the **theshold probability** ($p_t$), a user defined metric conveying their beliefs and objectives. 
+For example, if you were satisfied to find one new rare plant population per ten sites surveyed (1/10)*100, $p_t$ = 10%. 
+A DCA contains a **treat none** line with a fixed intercept at 0 and slope of 0 (i.e. a horizontal line); indicating the decision to take no action. 
+A DCA contains a '**treat all**' line with a Y intercept at the prevalence of the phenomenom within the populations, and passing through net benefit (x) at 0, at the threshold probability at the same prevalence (x,y), with a slope of -1. 
+To the right of the treat all line, and above the treat none line, and to the left (beneath) of the decision curve is the space representing a models improvement over treat none or all. 
 Finally, once the plot is populated with the above, net benefit (Y axis) is the intersection of $p_t$ with the model; in the example figure the model has a net benefit of 0.07 over the treat none strategy, and the model has an advantage of roughly 0.05 over a decision to treat all. 
 
-The DCA may accomodate more than one model at a time, when alternative - and perhaps complementary, models are available. 
-If only a single model is available to inform decisions a curve of its ... IS. 
+A DCA may accomodate more than one proposed model at a time, when alternative - and perhaps complementary (e.g. one model for high prevalence versus low prevalence scenarios) are available. 
 
-PR-AUC measures the ability of a model to detect the more rare class of an outcome, by using the precision (the accuracy of positive predictions) and recall (the ability to identify all positive instances) across different thresholds. 
-PR-AUC, unlike the closely related ROC-AUC wherein a value of 0.5 indicates a model is no better than random chance, PR-AUC greater than prevalence indicates a more performant model. 
+PR-AUC measures the ability of a model to detect the less common class of an outcome, by using the precision (the accuracy of positive predictions) and recall (the ability to identify all positive instances) across different thresholds. 
+PR-AUC unlike the closely related ROC-AUC (wherein a value of 0.5 indicates a model is no better than random chance) requires only that the value be greater than prevalence to indicate performant model. 
 For example, if a species is truly distributed in 0.1 (10% of a landscape), and a model has a PR-AUC of 0.2, it is twice as likely to detect it at landscape prevalence as by chance. 
 Hence PR-AUC, after correction to landscape prevalence, 
 
-## From Patients to Pixels and Patches 
+## From Patients through Pixels to Patches 
 
-DCA original usage relates to the population of patients that a doctor serves [@vickers2019simple]. 
-The doctor is likely to have beliefs on how often a certain procedure, generally an invasive procedure to detect a disease, and under what conditions this treatment should be performed. 
-Notably, this framework requires discrete entities (e.g. patients) that the doctors beliefs on treatment and a model pertain to. 
+DCA's original usage relates to the population of patients a clinical doctor serves [@vickers2019simple]. 
+Each doctor is likely to have beliefs on how often a certain procedure, especially an invasive procedure to biopsy for a disease, and under what conditions this treatment should be performed. 
+Notably, a DCA requires discrete entities (e.g. patients) that the doctors beliefs on treatment and a model pertain to. 
 
-For a land management application, the population is the area managed by a practicioner. 
+In a land management context, the population is the landscape managed by a practicioner, and the model can be evaluated in light of the prevalence of the phenomenom across it. 
 However, there must be discrete units to treat, such as: allotments (or geographic units within allotments), populations of a species, stream reaches, or forests etc. 
-For the application of species distribution models to detect new species, the unit of analysis must be defined as patches of suitable habitat; which tend to only exist with high resolution models; or can be recovered via clustering techniques (which, why?).
+For the application of species distribution models to detect new populations, the unit of analysis must be defined as patches of suitable habitat, which tend to only exist with high resolution models; or can be recovered via clustering techniques (which, why?).
 
-While modeling a species distribution we calculate PR-AUC from the ratio of presences to absence points. 
-However, these records data are rarely balanced to the scale of the landscape. 
+While modeling a species distribution PR-AUC is calculated from the ratio of presences to absence points in the evaluation ('test') set. 
+However, these records data are rarely balanced to the species prevalence across the landscape (i.e. a species occupying 5% of the landscape has a prevalence of 5%). 
 Indeed it is common practice for certain models to reduce the absences to be roughly 1-10x the number of presences (Elith).
-Hence using a 1:1 ratio of P:A, we are reporting the measures of success for a taxon that would occupy 50% of the lanscape.
+Hence using a 1:1 ratio of P:A, common practice for several ML models (which seek to have 'class balanced' records) we are reporting the measures of success for a taxon that would occupy 50% of the lanscape.
 
 << check elith 09 and chefaoui2008assessing >> for PA effects on SDM
 
-Clearly, this is not the case for even the majority common species. 
+Clearly, these rates of prevalence are not common for even many of the most common species. 
 Therefore, in the naive approach, we correct PR-AUC to represent the expected fraction of the landscape occupied by the taxon.
 For a rare species this fraction is small, and for a narrowly distributed endemic it can be far smaller than often assumed. 
 Our case study taxon occupies only ~0.003% of its modeled domain; a realistic range may span 0.001% to 5% of the landscape.
@@ -255,8 +254,8 @@ $$\text{Net benefit} = \underbrace{\frac{\text{occupied sites found}}{n}}_{\text
 
 ## Study System Background 
 
-*Eriogonum coloradense* Small is a rare species endemic to the central Rocky Mountains of Colorado, USA. 
-It has roughly XX populations, and YY subpopulations, exhibits a bimodal distribution, and is classified as SOMETHING. 
+*Eriogonum coloradense* Small (Polygonaceae) is endemic to the central Rocky Mountains of Colorado, USA. 
+It has roughly XX populations, and YY subpopulations, exhibits a bimodal distribution, and is classified as SOMETHING by SOMEAGENCY. 
 In Benkendorf et al. 2027 we iteratively develop, and ground truth, species distribution models for it. 
 
 ```{r calculate buffered area of presences and domains}
@@ -303,9 +302,9 @@ domain_prev_pct = round(
 ```
 
 For the purposes of this example we calculate the area of occupation as 1.25x multiplier of the known occurrence points, with a dissolved 50m buffer around them, which assumes each point represents a population extending in a 250m radius.
-Giving us a total area of `r area_iter0_occurrences*1.25` ha. 
+Giving us a total area of `r round(area_iter0_occurrences*1.25, 2)` ha. 
 
-The size of the modeled domain `r area_domain` ha, and the AOA as THIS. 
+The size of the modeled domain `r round(area_domain, 2)` ha, and the AOA as THIS. 
 Giving a prevalence across the domain of: `r domain_prev_pct`% , and a prevalence within the AOA of THIS %. 
 
 For $p_t$ we would be, and indeed were, happy to find one new (sub-)population every fifth sampling event. 
@@ -314,12 +313,12 @@ For $p_t$ we would be, and indeed were, happy to find one new (sub-)population e
 
 ### Naive Formulation 
 
-The most accessible way to calculate a DCA curve for practioners is by metrics commonly reported in the literature (PR-AUC, recall (TPR), and FPR), along with an estimate of the species prevalence across the study area (discussed in 'Using Summary Metrics').
-For users with access to raw model predictions (the predicted probability, the observed presence/absence) a more accurate assessment is possible, because the full precision–recall curve is observed rather than reconstructed from a handful of summary values (discussed in 'Using Per-point Predictions').
+The most accessible approach for a practicioner to calculate a DCA curve is by using metrics commonly reported in the literature (PR-AUC, recall (TPR), and false positive rate (FPR)), along with an estimate of the species prevalence across the study area (discussed in 'Using Summary Metrics').
+For users with access to raw model objects and predictions (the predicted probability, the observed presence/absence in the evaluation set) a more accurate calculation is possible, because the full precision–recall curve is observed rather than reconstructed from a handful of summary values (discussed in 'Using Per-point Predictions').
 
 #### Using Summary Metrics
 The most straightforward way to consider the benefits of using an SDM is to transform it's PR-AUC, measured on held-out test data to the estimated landscape prevalence of the rare species. 
-This is available as nearly all modellers report PR-AUC. 
+This is available as many modellers report PR-AUC. 
 
 PR-AUC is transformed to the taxons landscape prevalence via:
 
@@ -329,29 +328,22 @@ $$\text{precision}_{\pi}(r) = \frac{O\, r}{O\, r + \text{FPR}(r)}
 
 $$O = \frac{\pi}{1-\pi} \qquad \left(\text{e.g. } \pi = 0.025 \Rightarrow O \approx 0.026\right)$$
 
-where $r$ is recall, $\text{FPR}(r)$ is the false-positive rate at that recall, and $O$ is the
-prevalence odds, e.g. the odds a point drawn at random is occupied, set by the target landscape
-prevalence $\pi$. 
-Because recall and $\text{FPR}(r)$ are properties of the model's ROC and do
-not change with prevalence, the transform acts on precision alone: only the prevalence odds $O$
-moves.
+where $r$ is recall, $\text{FPR}(r)$ is the false-positive rate at that recall, and $O$ is the prevalence odds, e.g. the odds a point drawn at random is occupied, set via target landscape revalence $\pi$. 
+Because recall and $\text{FPR}(r)$ are properties of the model's ROC and do not change with prevalence, the transform acts on precision alone: only the prevalence odds $O$ moves.
 
 Because PR-AUC is relative to the prevalence of the taxon across the landscape, values for rare species might be quite low. 
 For example if a species has a prevalence of 2.5%, than a model with a PR-AUC of 0.25 is 10 times more likely to find it than an individual would by chance. 
 
-#### Using Per-point Predictions
-
- binormal ROC, which assumes the model's scores for occupied and empty sites each follow a Gaussian distribution.
-
-Using the summary metrics route, above, requires constructing the precision-recall curve using a distributional assumption of a binormal ROC, which assumes the model's scores for occupied and empty sites each follow a Gaussian distribution.
-However, if one has access to the statistical model itself, and the predicted probabilities for its test set, the DCA curve can be calculated from the observed predictions, bypassing this assumption.
+#### Using Per-point Predictions 
+This approach utilises a binomral ROC, which assumtes the models scores for occupied and empty sites both follow Gaussian distributions. 
+If one has access to the statistical model itself, and the predicted probabilities for its evaluation set, the DCA curve can be calculated from the observed predictions, bypassing the binormal ROCs assumptions.
 Using the predictions allows direct counting of precision and net benefit at each threshold, after correcting for prevalence.  
 
-A held-out test set, which generally has a different ratio of presences to absences than the species observed prevalence on the lanscape, has each point $i$ re-weighted to the target prevalence $\pi$ before scoring:
+The evaluation set has each point $i$ re-weighted to the target prevalence $\pi$ before scoring:
 
 $$w_i = \begin{cases} \pi/n_1 & y_i = 1 \\[2pt] (1-\pi)/n_0 & y_i = 0 \end{cases}$$
 
-where $w_i$ is the weight given to test point $i$, $y_i \in \{0,1\}$ its known label (1 = presence, 0 = absence), $n_1$ and $n_0$ the numbers of presence and absence points in the test set, and $\pi$ the target landscape prevalence.
+where $w_i$ is the weight given to an evaluation point $i$, $y_i \in \{0,1\}$ the points known mark (1 = presence, 0 = absence), $n_1$ and $n_0$ the numbers of presence and absence points in the evaluation set, and $\pi$ the target landscape prevalence.
 
 Net benefit and the precision–recall curve are then calculated directly from the weighted and probability-ranked points:
 
@@ -359,29 +351,33 @@ $$\text{NB}(p_t) = \sum_{i:\, \hat p_i \ge p_t} w_i\, y_i \;-\; \frac{p_t}{1-p_t
 
 $$\text{recall}(p_t) = \frac{1}{\pi}\sum_{i:\, \hat p_i \ge p_t} w_i\, y_i, \qquad \text{precision}_{\pi}(p_t) = \frac{\sum_{i:\, \hat p_i \ge p_t} w_i\, y_i}{\sum_{i:\, \hat p_i \ge p_t} w_i}$$
 
-where $\hat p_i$ is the predicted probability for point $i$ and $p_t$ the threshold. The weights sum to one and fix the effective prevalence at $\pi$, so a point's contribution no longer depends on the presence-to-absence ratio the model was fit with.
+where $\hat p_i$ is the predicted probability for point $i$ and $p_t$ the threshold. 
+The weights sum to one and fix the effective prevalence at $\pi$, so a point's contribution is corrected to the landscape prevalence rather than the models training data.
 
-Our simulations (Appendix 1) indicate when a model was trained at a presence-to-absence (P:A) ratio far from the expected landscape prevalence, the summary route is biased and per-point predictions give a more accurate curve.
-When the P:A ratio is close to the landscape prevalence, the summary route is adequate and per-point predictions are unlikely to alter your intepretations of the models utility.
+Our simulations (Appendix 1) indicate when a model was trained at a presence-to-absence (P:A) ratio different from the expected landscape prevalence, the summary route is biased and per-point predictions give more accurate curves.
+When the P:A ratio is closer to the landscape prevalence, the summary route is adequate and per-point predictions are unlikely to alter intepretations of the models benefits.
+(Appendix 1). 
 
 #### Curve Uncertainty Metrics
 
-A confidence interval around the DCA for the model can be calculated when a user has per-point data.
-Notably, the lower-confidence interval is the most important for decision making, because it is the difference between the treat all and treat none scenarios that affect the advantage of the model [@vickers2008decision].
+A confidence interval around the DCA for the model can be calculated when a user has the models evaluation data.
+Notably, only the lower-confidence interval is the relevant for decision making, because only the difference between the treat all and treat none scenarios affect the advantage of the model [@vickers2008decision].
 WE DID THIS AND SIMILAR TO VICKERS, WHILE USEFUL TO HAVE, IT IS GENERALLY QUITE TIGHT TO THE CURVE. 
 
-Decision makers without access to the raw point data cannot calculate a formal confidence interval. 
-However, sensitivity analysis offers a stand in WHERE IF YOU DO THIS. 
-However, based on our results, where we repeatedly model species under similar conditions (pseudo-absence universe, Presence absence ratios, covariate selection, and modelling methods), we offer an estimate that PR-AUC halfwidth varies by around 0.04 PR-AUC accuracy, as a starting point suggestion (Appendix 5)
+Decision makers without access to the evaluation data cannot calculate a formal confidence interval. 
+However, sensitivity analysis offers a stand in plausibility band. 
+Based on simulations, where we repeatedly model species under similar conditions (pseudo-absence universe, presence absence ratios, covariate selection, and modelling methods), we offer an estimate that PR-AUC halfwidth varies by around 0.04 PR-AUC accuracy, as a starting point suggestion (Appendix 5)
 
 #### Naive formulation summary
 
 ![An SDM's net benefit calculated using the two naive approaches. Using the binormal assumption on the reported PR-AUC value (summary), and from the held-out predictions (per-point). For this model, fit with a P:A ratio near the landscape prevalence, the two curves largely agree. Here two curves cross near p_t ≈ 0.25, with the per-point curve marginally higher under broad survey effort and marginally lower at the most selective thresholds, where few sites clear the cutoff.](../figures/dca_baseline_dcurves.png){#fig-naive-dca}
 
-However, while useful, both of these approaches entail three assumptions, which may not be safe for all decisions.
-First, that it interpolates across the whole landscape rather than extrapolating into part of it;  second, that the model is perfectly calibrated, without bias;  and third, that pixels are independent and each able to harbour the taxon. 
+While useful, both of these approaches entail three assumptions, that may not be suitable for all decisions.
+First, that the model interpolates across the entire landscape rather than extrapolating into part of it. 
+Second, that the model is perfectly calibrated, without bias
+And third, that pixels are independent response units and each equally likely to be occupied by the taxon. 
 
-### Correcting to the Area of Applicability
+### Identifying the Models Area of Applicability within the Landscape
 
 The area of applicability is the portion of the landscape where the model is interpolating. 
 For SDMs our work has shown that the area of applicability (Meyers & Pebesma) is best calculated using only training presences, or these and ground-truthed absences. 
