@@ -1,7 +1,7 @@
 ---
 title: "Appendix 7 — Priority Ranking of Patches"
-date: last-modified
 format:
+  html: default
   pdf:
     pdf-engine: xelatex
     geometry: margin=1in
@@ -11,6 +11,11 @@ format:
       - \doublespacing
       - \usepackage{lineno}
       - \linenumbers
+      - \usepackage{titling}
+      - \setlength{\droptitle}{-3.5cm}
+      - \posttitle{\par\end{center}\vspace{-7em}}
+      - \predate{}
+      - \postdate{}
 ---
 
 Each term is rescaled to $[0,1]$ and oriented so **higher = higher survey priority**; the index is their (optionally weighted) sum. $\widetilde{\,\cdot\,}$ denotes a min–max rescale.

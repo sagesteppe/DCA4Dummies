@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Priority Ranking of Patches</title>
+<title>Appendix 7 — Priority Ranking of Patches</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -70,14 +70,14 @@ window.Quarto = {
 <body>
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-<div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
   
-</div>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="Appendix7.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Priority Ranking of Patches</h1>
+<h1 class="title">Appendix 7 — Priority Ranking of Patches</h1>
 </div>
 
 
@@ -95,7 +95,16 @@ window.Quarto = {
 
 
 <p>Each term is rescaled to <span class="math inline">\([0,1]\)</span> and oriented so <strong>higher = higher survey priority</strong>; the index is their (optionally weighted) sum. <span class="math inline">\(\widetilde{\,\cdot\,}\)</span> denotes a min–max rescale.</p>
-<p><span class="math display">\[\text{Rank}(x) = D_g + D_r + S + A + C\]</span></p>
+<p><span class="math display">\[\text{Rank}(x) = P + D_g + D_r + S + A + C\]</span></p>
+<section id="model-suitability" class="level3">
+<h3 class="anchored" data-anchor-id="model-suitability">Model suitability</h3>
+<p>Models how likely a patch is to be real habitat, from the SDM itself.</p>
+<p><strong>P — predicted suitability.</strong> The patch’s mean modelled suitability (<code>prob_mean</code>), rescaled.</p>
+<blockquote class="blockquote">
+<p><em>More suitable patches are more likely to hold the taxon.</em></p>
+</blockquote>
+<p><span class="math display">\[P(x) = \widetilde{\,\mathrm{prob\_mean}(x)\,}\]</span></p>
+</section>
 <section id="dispersal" class="level3">
 <h3 class="anchored" data-anchor-id="dispersal">Dispersal</h3>
 <p>Models the likelihood of propagules to reach a patch of suitable habitat.</p>
@@ -112,7 +121,7 @@ window.Quarto = {
 </section>
 <section id="historic-survey-effort" class="level3">
 <h3 class="anchored" data-anchor-id="historic-survey-effort">Historic survey effort</h3>
-<p>Models that patches with higher survey efforts are more likely to not have an undocumented presence.</p>
+<p>Models patches with higher survey efforts are more likely to not have an undocumented presence.</p>
 <p><strong>S — survey intensity (bias surface).</strong> Well-surveyed ground is <em>less</em> likely to still hide an undocumented population. A continuous Gaussian field of target-group records.</p>
 <blockquote class="blockquote">
 <p><em>Well-surveyed patches are less likely to have an undocumented population.</em></p>

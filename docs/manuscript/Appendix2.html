@@ -6,9 +6,8 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-11-08">
 
-<title>Appendix 2 — The applicability downgrade: easy absences inflate reported skill</title>
+<title>Appendix 2 — Correcting for the Models Area of Applicability</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -42,14 +41,14 @@ ul.task-list li input[type="checkbox"] {
 <body>
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-<div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
   
-</div>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="Appendix2.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Appendix 2 — The applicability downgrade: easy absences inflate reported skill</h1>
+<h1 class="title">Appendix 2 — Correcting for the Models Area of Applicability</h1>
 </div>
 
 
@@ -57,12 +56,6 @@ ul.task-list li input[type="checkbox"] {
 <div class="quarto-title-meta">
 
     
-    <div>
-    <div class="quarto-title-meta-heading">Published</div>
-    <div class="quarto-title-meta-contents">
-      <p class="date">November 8, 2026</p>
-    </div>
-  </div>
   
     
   </div>
@@ -72,13 +65,13 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<p><strong>Question.</strong> A reported PR-AUC or ROC-AUC summarises a model over its whole test set. But does that number describe the decision a practitioner actually faces — distinguishing occupied sites from the <em>hard</em>, environmentally-similar sites they might otherwise survey?</p>
-<p><strong>Experiment.</strong> We computed the Area of Applicability from the <strong>training presences only</strong> (pseudo-absences conflate the dissimilarity index) and labelled every hold-out point interpolation (<code>DI ≤ DI_thresh</code>) or extrapolation (<code>DI &gt; DI_thresh</code>). This split is nearly collinear with the outcome: presences and a few hard absences fall in-domain, while the great majority of absences — environmentally distant from any occurrence — fall out-of-domain. We then scored each model two ways: <em>naive</em>, on the full hold-out, and <em>AOA-honest</em>, on the in-domain points only, reweighting both to the same prevalence so the only difference is which absences are in play. Performance was compared with ROC-AUC (prevalence-invariant) across all spatial-mapping models.</p>
+<p><strong>Situation.</strong> A reported PR-AUC or ROC-AUC summarises a model over its whole test set. However, the ease of far-away absences of pseudo-absences is likely to increase these reported metrics in the areas of landscape most difficult to distinguish suitable habitat in. How does restricting the analysis to the area of applicability affect PR-AUC and ROC-AUC scores?</p>
+<p><strong>Experiment.</strong> We computed the Area of Applicability from the <strong>training presences only</strong> (pseudo-absences conflate the dissimilarity index) and labelled every hold-out point interpolation (<code>DI ≤ DI_thresh</code>) or extrapolation (<code>DI &gt; DI_thresh</code>). This split is nearly collinear with the outcome: presences and a few hard absences fall in-domain, while the great majority of absences, environmentally distant from any occurrence, fall out-of-domain. We then scored each model two ways: <em>naive</em>, on the full hold-out, and <em>AOA-honest</em>, on the in-domain points only, reweighting both to the same prevalence so the only difference is which absences are considered. Performance was compared with ROC-AUC (prevalence-invariant) across all 128 SDM models.</p>
 <!-- Shared AOA-downgrade analysis, owned by Analyses.qmd and {{< include >}}'d into Appendix2.qmd
      so the figure and its ROC-drop statistics live in one place. The including document's setup
      chunk must already define HERE and load the fn_*.R helpers, data.table and ggplot2. It leaves
      behind `p_aoa` (the plot) and `n_models` / `pct_drop` / `med_full` / `med_in` (the stats). -->
-<p><strong>Result.</strong> Restricting to the in-domain region — where the model must separate presences from absences that <em>resemble</em> occupied habitat — lowers measured skill in <strong>100% of 128 models</strong> (median ROC-AUC 0.96 → 0.76). The headline number is inflated by free credit for trivially rejecting the easy, far-from-suitable extrapolation absences (the “AUC inflated by easy absences” critique). In decision terms the effect is stark: the naive curve looks uniformly excellent, while the honest curve loses all value beyond a threshold of ~10%.</p>
+<p><strong>Result.</strong> Restricting to the in-domain region, where the model must separate presences from absences that <em>resemble</em> occupied habitat, lowers measured skill in <strong>100% of 128 models</strong> (median ROC-AUC 0.96 -&gt; 0.76). The headline number is inflated by free credit for trivially rejecting the easy, far-from-suitable extrapolation absences. In decision terms the effect is stark: the naive curve looks uniformly excellent, while the honest curve loses all value beyond a threshold of ~10%.</p>
 <div class="cell" data-layout-align="center">
 <div class="cell-output-display">
 <div id="fig-aoa-inflation" class="quarto-float quarto-figure quarto-figure-center anchored" data-fig-align="center">
@@ -93,8 +86,8 @@ Figure&nbsp;1: Naive vs AOA-honest decision curve for the example model, both at
 </div>
 </div>
 </div>
-<p><strong>Isolating it from ground truth.</strong> This downgrade uses only the hold-out predictions and the presences-only dissimilarity index — no field data — so it is an <em>a priori</em>, quantified penalty, and it is orthogonal to the prevalence correction of Appendix 1 (that sets the baseline; this measures discrimination among the hard cases). What it cannot reach is the <em>other</em> edge: the hold-out contains almost no points in genuinely novel, high-suitability environments, so it cannot characterise dangerous extrapolation. As expected, models perform poorly when extrapolating beyond their training space — but quantifying <em>that</em> collapse is an a posteriori, ground-truth question, not something the hold-out can answer.</p>
-<p><strong>Implication.</strong> Report model skill restricted to the area of applicability; the headline, whole-test number overstates decision-relevant performance, and the overstatement is computable before any field work.</p>
+<p><strong>Isolating it from ground truth.</strong> This downgrade uses only the hold-out predictions and the presences-only dissimilarity index, hence an <em>a priori</em>, quantified penalty. Further it is orthogonal to the prevalence correction of Appendix 1 (that sets the baseline; this measures discrimination among the hard cases). What it cannot reach is the <em>other</em> edge: the hold-out contains almost no points in genuinely novel, high-suitability environments, so it cannot characterise dangerous extrapolation. As expected, models perform poorly when extrapolating beyond their training space, but quantifying <em>that</em> collapse is an a posteriori, ground-truth question, not something the hold-out can answer.</p>
+<p><strong>Conclusion.</strong> Report model skill restricted to the area of applicability; the headline, whole-test number overstates decision-relevant performance, and the overstatement is computable before any field work.</p>
 
 </main>
 <!-- /main column -->

@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="sagesteppe">
-<meta name="dcterms.date" content="2026-11-06">
+<meta name="dcterms.date" content="2026-11-28">
 
 <title>Decision Curve Analysis for Dummies</title>
 <style>
@@ -122,6 +122,7 @@ window.Quarto = {
   <li><a href="#a-fair-baseline-beating-the-expert" id="toc-a-fair-baseline-beating-the-expert" class="nav-link" data-scroll-target="#a-fair-baseline-beating-the-expert">§2 · A fair baseline: beating the expert</a>
   <ul class="collapse">
   <li><a href="#how-to-read-2" id="toc-how-to-read-2" class="nav-link" data-scroll-target="#how-to-read-2">How to read §2</a></li>
+  <li><a href="#appendices" id="toc-appendices" class="nav-link" data-scroll-target="#appendices">Appendices</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -148,7 +149,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">November 6, 2026</p>
+      <p class="date">November 28, 2026</p>
     </div>
   </div>
   
@@ -1241,6 +1242,20 @@ Fixed here: landscape prevalence 2% (~10 populations hidden in 500 sites), exper
 </div>
 </div>
 </div>
+</section>
+<section id="appendices" class="level2">
+<h2 class="anchored" data-anchor-id="appendices">Appendices</h2>
+<p>Supporting analyses and derivations. Each opens in your browser; a typeset PDF of every appendix also ships with the manuscript.</p>
+<ul>
+<li><a href="manuscript/Appendix1.html"><strong>Appendix 1</strong> — Comparison of DCA curves from reported scalars and test data</a> — when the cheap summary route (reconstruct the curve from a reported PR-AUC) disagrees with the exact per-point route.</li>
+<li><a href="manuscript/Appendix2.html"><strong>Appendix 2</strong> — Correcting for the model’s area of applicability</a> — restricting scores to where the model is actually applicable (AOA).</li>
+<li><a href="manuscript/Appendix3.html"><strong>Appendix 3</strong> — Decision curves are resilient to mis-estimated landscape prevalence</a> — how far prevalence can be off before the ranking changes.</li>
+<li><a href="manuscript/Appendix4.html"><strong>Appendix 4</strong> — Areas of applicability shrink with the number of covariates</a> — the AOA contracts as model dimensionality grows.</li>
+<li><a href="manuscript/Appendix5.html"><strong>Appendix 5</strong> — A default plausibility band for repeated SDMs</a> — calculating an expected spread across replicate models.</li>
+<li><a href="manuscript/Appendix6.html"><strong>Appendix 6</strong> — Choosing the prominence threshold (δ) for patch delineation</a> — selecting the cutoff that separates patches.</li>
+<li><a href="manuscript/Appendix7.html"><strong>Appendix 7</strong> — Priority ranking of patches</a> — ordering delineated patches for survey.</li>
+<li><a href="manuscript/Appendix8.html"><strong>Appendix 8</strong> — Spatial structure in model residuals</a> — a diagnostic for spatially structured mis-prediction a decision curve cannot reveal.</li>
+</ul>
 <p style="font-size:0.85rem;color:#898781">
 Built with <a href="https://quarto.org">Quarto</a> + Observable JS — everything runs in your browser, nothing is sent anywhere. Source: <a href="https://github.com/sagesteppe/CDA4Dummies">github.com/sagesteppe/CDA4Dummies</a>.
 </p>

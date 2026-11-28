@@ -1,7 +1,7 @@
 ---
 title: "Appendix 6 — Choosing the Prominence Threshold (delta) for Patch Delineation"
-date: last-modified
 format:
+  html: default
   pdf:
     pdf-engine: xelatex
     geometry: margin=1in
@@ -11,6 +11,11 @@ format:
       - \doublespacing
       - \usepackage{lineno}
       - \linenumbers
+      - \usepackage{titling}
+      - \setlength{\droptitle}{-3.5cm}
+      - \posttitle{\par\end{center}\vspace{-7em}}
+      - \predate{}
+      - \postdate{}
 ---
 
 ```{r setup}

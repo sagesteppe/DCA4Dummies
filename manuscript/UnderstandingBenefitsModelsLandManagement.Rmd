@@ -379,12 +379,13 @@ And third, that pixels are independent response units and each equally likely to
 
 ### Identifying the Models Area of Applicability within the Landscape
 
-The area of applicability is the portion of the landscape where the model is interpolating. 
-For SDMs our work has shown that the area of applicability (Meyers & Pebesma) is best calculated using only training presences, or these and ground-truthed absences. 
-Many pseudo-absences, may be located far enough in environmental or geographic space that they do little to inform the ability of the model to detect rare species [CITE]; rather they function to prevent the prediction of suitable habitat in uncovered space. 
+The area of applicability is the portion of a landscape where a model is interpolating rather than extrapolating [meyers]. 
+For SDMs our work has shown that the area of applicability (Meyers & Pebesma) is best calculated using only training presences, or these and ground-verified absences. 
+NEED TO STATE WHY NOT PA -- ASSUMED BASED ONLY ON ENV MASKS + NOT A TRULY KNOWN HULL. 
+Further pseudo-absences, may be located far enough in environmental or geographic space that they do little to inform the ability of the model to detect rare species [CITE]; rather functioning to prevent the prediction of suitable habitat in uncovered space. 
 
-Accordingly, models are expected to be less performant within the AOA than across the entire background landscape, because these easily-discerned absences inflate whole-landscape performance metrics (Lobos). 
-To calculate this curve, the procedure outlined in section "Using Per-point Predictions" and test data that fall within the AOA. 
+A consequence of this relationship is that model results are expected to be less optimistic, models are expected to be less performant within the AOA than across the entire background landscape, because these easily-discerned absences inflate whole-landscape performance metrics (Lobos). 
+To calculate a DCA curve for the area of applicability a user will require the evaluation set predictions, training data, and raster covariates (to create the AOA mask, if not produced already) the procedure outlined in section "Using Per-point Predictions" and test data that fall within the AOA. 
 A user should also redefine their expected prevalence of the species within this subset of the landscape using the raster surfaces depicting the AOA. 
 Across 128 models, restricting to the area of applicability lowered ROC-AUC by a median of ~25% and more than halved PR-AUC (from 0.61 to 0.25 at 5% prevalence); apparent skill shrinks sharply, yet net benefit stays positive at the decision-relevant thresholds (Appendix 2).
 

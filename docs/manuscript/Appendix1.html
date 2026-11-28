@@ -6,9 +6,8 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-11-08">
 
-<title>Appendix 1 — When the summary route reproduces the per-point curve</title>
+<title>Appendix 1 — Comparision of DCA Curves from Reported Scalars and Test Data</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -71,14 +70,14 @@ window.Quarto = {
 <body>
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-<div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
   
-</div>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="Appendix1.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Appendix 1 — When the summary route reproduces the per-point curve</h1>
+<h1 class="title">Appendix 1 — Comparision of DCA Curves from Reported Scalars and Test Data</h1>
 </div>
 
 
@@ -86,12 +85,6 @@ window.Quarto = {
 <div class="quarto-title-meta">
 
     
-    <div>
-    <div class="quarto-title-meta-heading">Published</div>
-    <div class="quarto-title-meta-contents">
-      <p class="date">November 8, 2026</p>
-    </div>
-  </div>
   
     
   </div>
@@ -101,9 +94,9 @@ window.Quarto = {
 </header>
 
 
-<p><strong>Question.</strong> The summary route (reconstruct a decision curve from a model’s reported PR-AUC via a binormal ROC) is cheap but assumes a curve shape; the per-point route (reweight the held-out predictions to the target prevalence) is exact but needs the raw predictions. When do they agree?</p>
-<p><strong>Experiment.</strong> For 128 spatial-mapping SDMs of <em>E. coloradense</em> spanning presence:absence design ratios from 1:1 to 1:30, we computed both decision curves at a target landscape prevalence and recorded their difference, <code>gap = net benefit (summary) − net benefit (exact)</code>, averaged over a prevalence-relative threshold window. We then (i) held the target at 2.5% and varied the P:A ratio, and (ii) swept the target prevalence from 1% to 50%. Each model’s binormal was anchored to its own reported PR-AUC at its evaluation prevalence; the gap is a median across replicate seeds.</p>
-<p><strong>Result.</strong> The gap is governed by the distance between a model’s <em>evaluation</em> prevalence (set by its P:A ratio, natural prevalence <span class="math inline">\(1/(1+\text{ratio})\)</span>) and the <em>target</em> prevalence — not by the model’s calibration (hold-out cox intercept is unrelated, Spearman <span class="math inline">\(\approx 0.17\)</span>).</p>
+<p><strong>Situation</strong> The summary route (reconstruct a decision curve from a model’s reported PR-AUC via a binormal ROC) is cheap but assumes a curve shape. Wheras the per-point route (reweight the held-out predictions to the target prevalence) is exact but needs the raw predictions. Here we determine whether the two values disagree substantially.</p>
+<p><strong>Experiment.</strong> For 128 SDMs of <em>E. coloradense</em> spanning presence:absence ratios from 1:1 to 1:30, we computed both decision curves at a target landscape prevalence and recorded their difference. Defined as: <code>gap = net benefit (summary) − net benefit (exact)</code>, and averaged over a prevalence-relative threshold window. We then (i) held the target landscape prevalence at 2.5% and varied the P:A ratio. Additionally we (ii) swept the target prevalence from 1% to 50% to determine if this trend prevailed across ratios. Each model’s binormal was anchored to its own reported PR-AUC at its evaluation prevalence; the gap is a median across replicate seeds.</p>
+<p><strong>Result.</strong> The discord, between the two methods to calculate DCA, is governed by the distance between a model’s <em>evaluation</em> prevalence (set by its P:A ratio, natural prevalence <span class="math inline">\(1/(1+\text{ratio})\)</span>) and the <em>target</em> prevalence. The model’s calibration has no effect (hold-out cox intercept, Spearman <span class="math inline">\(\approx 0.17\)</span>).</p>
 <div class="cell" data-layout-align="center">
 <div class="cell-output-display">
 <div id="fig-gap-ratio" class="quarto-float quarto-figure quarto-figure-center anchored" data-fig-align="center">
@@ -132,7 +125,7 @@ Figure&nbsp;2: Sweeping the target prevalence, every ratio’s gap bottoms out w
 </div>
 </div>
 </div>
-<p><strong>Implication.</strong> Use the summary route when a model’s reported P:A ratio sits near the landscape prevalence of interest; otherwise the reported number is being read at the wrong prevalence, and the per-point route is worth the extra data. This is a property of <em>where the model was scored</em>, not of how good it is.</p>
+<p><strong>Conclusion</strong> When, the model was trained on a presence:absence ratio that differs vastly from the landscape prevalence of the taxon (e.g.&nbsp;1:1), use the per-point calculation for DCAs..</p>
 
 </main>
 <!-- /main column -->

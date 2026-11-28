@@ -766,6 +766,28 @@ verdict2 = {
 }
 ```
 
+## Appendices
+
+Supporting analyses and derivations. Each opens in your browser; a typeset PDF of
+every appendix also ships with the manuscript.
+
+- [**Appendix 1** — Comparison of DCA curves from reported scalars and test data](manuscript/Appendix1.html)
+  — when the cheap summary route (reconstruct the curve from a reported PR-AUC) disagrees with the exact per-point route.
+- [**Appendix 2** — Correcting for the model's area of applicability](manuscript/Appendix2.html)
+  — restricting scores to where the model is actually applicable (AOA).
+- [**Appendix 3** — Decision curves are resilient to mis-estimated landscape prevalence](manuscript/Appendix3.html)
+  — how far prevalence can be off before the ranking changes.
+- [**Appendix 4** — Areas of applicability shrink with the number of covariates](manuscript/Appendix4.html)
+  — the AOA contracts as model dimensionality grows.
+- [**Appendix 5** — A default plausibility band for repeated SDMs](manuscript/Appendix5.html)
+  — calculating an expected spread across replicate models.
+- [**Appendix 6** — Choosing the prominence threshold (δ) for patch delineation](manuscript/Appendix6.html)
+  — selecting the cutoff that separates patches.
+- [**Appendix 7** — Priority ranking of patches](manuscript/Appendix7.html)
+  — ordering delineated patches for survey.
+- [**Appendix 8** — Spatial structure in model residuals](manuscript/Appendix8.html)
+  — a diagnostic for spatially structured mis-prediction a decision curve cannot reveal.
+
 <p style="font-size:0.85rem;color:#898781">
 Built with <a href="https://quarto.org">Quarto</a> + Observable JS — everything runs
 in your browser, nothing is sent anywhere. Source:

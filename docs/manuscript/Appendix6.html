@@ -6,7 +6,6 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-11-18">
 
 <title>Appendix 6 — Choosing the Prominence Threshold (delta) for Patch Delineation</title>
 <style>
@@ -51,7 +50,7 @@ ul.task-list li input[type="checkbox"] {
   <li><a href="#what-the-landscape-distribution-says-and-why-binormal-is-the-wrong-frame-here" id="toc-what-the-landscape-distribution-says-and-why-binormal-is-the-wrong-frame-here" class="nav-link" data-scroll-target="#what-the-landscape-distribution-says-and-why-binormal-is-the-wrong-frame-here">What the landscape distribution says (and why binormal is the wrong frame <em>here</em>)</a></li>
   <li><a href="#recommendation-delta-is-a-policy-knob-anchor-it-dont-pretend-to-derive-it" id="toc-recommendation-delta-is-a-policy-knob-anchor-it-dont-pretend-to-derive-it" class="nav-link" data-scroll-target="#recommendation-delta-is-a-policy-knob-anchor-it-dont-pretend-to-derive-it">Recommendation: delta is a policy knob — anchor it, don’t pretend to derive it</a></li>
   </ul>
-</nav>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="Appendix6.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></nav>
 </div>
 <main class="content" id="quarto-document-content">
 
@@ -65,12 +64,6 @@ ul.task-list li input[type="checkbox"] {
 <div class="quarto-title-meta">
 
     
-    <div>
-    <div class="quarto-title-meta-heading">Published</div>
-    <div class="quarto-title-meta-contents">
-      <p class="date">November 18, 2026</p>
-    </div>
-  </div>
   
     
   </div>
@@ -92,7 +85,7 @@ ul.task-list li input[type="checkbox"] {
 <img src="Appendix6_files/figure-html/fig-delta-survival-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="1050">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-delta-survival-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;1: Cores recovered per patch as delta is relaxed, drawn as an elbow (scree) plot: delta runs from coarse (0.25, left) to fine (0.05, right), so moving rightward splits more. Reading it this way, the curve stays flat while only genuine, well-separated cores are being resolved, then bends upward into the regime where relaxing delta further buys mostly noise cores. The bend — the elbow near delta = 0.1 (dotted) — is the operating point: split down to it, not past it. The region below 0.05 (off-frame right) is the noise explosion toward hundreds of cores per patch.
+Figure&nbsp;1: Peak-survival curve: mean cores recovered per patch as delta rises. Each point is a count of cores whose prominence exceeds that delta (plus the one global peak). The curve is smooth and monotone — no plateau, no shoulder — so no single delta is singled out by the data. The dashed line is the Analyses.qmd default (0.05); the dotted line is the stopping-rule value derived below.
 </figcaption>
 </figure>
 </div>
